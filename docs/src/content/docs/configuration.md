@@ -1,7 +1,7 @@
 ---
 title: Configuration
 description: Configure one mailbox, TLS endpoints, OAuth access, and optional write features.
-summary: Environment-variable reference and generic or Spacemail connection settings.
+summary: Environment variables for Spacemail, Gmail/Workspace, and generic mail servers.
 order: 40
 category: Reference
 ---
@@ -16,10 +16,14 @@ The process reads environment variables. A `.env` file is not loaded automatical
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `MAIL_PROVIDER` | `spacemail` | `spacemail` or `custom` |
+| `MAIL_PROVIDER` | `spacemail` | `spacemail`, `gmail` (including Workspace), or `custom` |
+| `MAIL_AUTH_MODE` | `password`, or `google_oauth2` for Gmail | Gmail accepts `google_oauth2` or explicit eligible `app_password`; other providers use `password` |
 | `MAIL_USERNAME` | Required | Mailbox login, normally the full email address |
-| `MAIL_PASSWORD` | Required | Mailbox password or provider-supported app password |
+| `MAIL_PASSWORD` | Required for password modes | Spacemail/custom mailbox password, or eligible Google app password in its explicit mode; unset for Google OAuth |
 | `MAIL_FROM` | `MAIL_USERNAME` | Bare sender address accepted by the provider |
+| `GOOGLE_CLIENT_ID` | Required for Google OAuth | Matching owner-provisioned Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Required for Google OAuth | Client secret, excluded from JSON/output |
+| `GOOGLE_REFRESH_TOKEN` | Required for Google OAuth | Offline grant for the configured mailbox; excluded from JSON/output |
 | `MAIL_ALIASES` | Empty | Comma-separated own addresses excluded from derived reply/reply-all recipients; maximum 50 |
 | `IMAP_HOST` | Provider preset | IMAP DNS hostname |
 | `IMAP_PORT` | `993` | Implicit-TLS IMAP port |
@@ -37,11 +41,15 @@ The preset uses `mail.spacemail.com:993` for IMAP and `mail.spacemail.com:465` f
 
 These are the settings published in [Spacemail's official client setup guide](https://www.spaceship.com/knowledgebase/set-up-spacemail-outlook-imap-pop3/). The preset configures endpoints; it does not create an account or discover credentials.
 
+### Gmail and Google Workspace
+
+Use `MAIL_PROVIDER=gmail` and server-side Google OAuth credentials. The preset pins official Gmail hosts and defaults to XOAUTH2 refresh-token authentication. An explicit app-password alternative is conditional on account/admin eligibility. Read [Gmail and Google Workspace](/docs/gmail-workspace) before setup, including the personal/internal scope, full-mail grant, Sent-copy behavior and permanent-delete restriction.
+
 ### Other providers
 
 Use `MAIL_PROVIDER=custom`, then set `IMAP_HOST` and `SMTP_HOST` to the provider's documented endpoints. For STARTTLS submission, set `SMTP_PORT=587` and `SMTP_TLS_MODE=starttls`.
 
-The current mail login uses a username/password. A provider that requires OAuth for IMAP or SMTP needs a separate mail-authentication implementation. OAuth on the MCP endpoint authenticates the agent client; it does not replace the mailbox's own login.
+Spacemail and custom providers use the existing username/password flow. Gmail has a dedicated server-side Google OAuth flow. Other providers requiring OAuth need their own implementation; arbitrary token endpoints are not supported. OAuth on the MCP endpoint authenticates the agent client and remains separate from mailbox authentication.
 
 ## Reply identities
 
@@ -57,7 +65,7 @@ The current mail login uses a username/password. A provider that requires OAuth 
 | --- | --- | --- |
 | `MAIL_ENABLE_WRITES` | Disabled | Allows mailbox mutations when the token also has `mail.write` |
 | `MAIL_ENABLE_SEND` | Disabled | Allows preparation and sending when the token has `mail.send` and a durable store is configured |
-| `MAIL_ENABLE_DELETE` | Disabled | Additional gate for permanent single-message deletion; ordinary writes must also be enabled |
+| `MAIL_ENABLE_DELETE` | Disabled | Additional gate for permanent single-message deletion; ordinary writes must also be enabled; unavailable for Gmail/Workspace |
 | `ANGELOS_REDIS_REST_URL` | Unset | HTTPS endpoint for preparation/dispatch and read-only receipt lookup |
 | `ANGELOS_REDIS_REST_TOKEN` | Unset | Secret used to authenticate durable-store requests |
 

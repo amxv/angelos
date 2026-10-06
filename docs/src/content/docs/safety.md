@@ -48,9 +48,15 @@ SMTP cannot guarantee exactly-once delivery across every network failure or proc
 
 A connection can fail after the server accepted the message but before Angelos received its response. Automatic resend in that situation can deliver duplicates. Check the provider and the destination before deciding whether a new send is needed.
 
+## Gmail-specific safeguards
+
+Gmail labels overlap, so removing a message from one folder is not proof of permanent deletion from the account. Gmail permanent deletion is blocked before Deleted/EXPUNGE regardless of the delete gate. Native MOVE remains required for moves and Trash; no destructive emulation is used. Gmail SMTP files Sent automatically, so explicit Sent filing is rejected before the send claim. Correct `append_sent` to `false` rather than preparing another copy.
+
+Google authentication failure never switches to password authentication or retries a send. If reauthorization is required, the owner performs it through an approved flow. Reauthorization does not make an unknown send outcome safe to retry. Public Google OAuth verification is not promised for this full-mail IMAP/SMTP design; see the [provider restrictions](/docs/gmail-workspace).
+
 ## Stored data
 
-Mailbox credentials stay in the API environment and are used only to authenticate to the configured provider. Tool arguments cannot redirect those credentials to another server.
+Mailbox credentials stay in the API environment and are used only to authenticate to the configured provider. Tool arguments cannot redirect those credentials to another server. Google refresh credentials are sent only to Google's pinned HTTPS token endpoint, and resulting access tokens only to verified Gmail IMAP/SMTP endpoints. Google's full-mail protocol grant is broader than the MCP scopes; the server still enforces each MCP operation boundary and feature gate.
 
 The durable send store receives the full prepared message, its recipients, and attachment bytes. Choose a store and account suitable for that private data. An unclaimed preparation expires after 15 minutes. At the atomic dispatch claim, the stored text and HTML bodies, wire bytes, recipients, subject, and attachment data are replaced with a minimal record containing the preparation ID, digest, Message-ID, expiry, and status. That record is retained for seven days; completion adds the outcome and stage.
 

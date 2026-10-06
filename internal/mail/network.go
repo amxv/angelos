@@ -20,7 +20,8 @@ import (
 const maxWireBytes int64 = 12 << 20
 
 type Backend struct {
-	config config.Config
+	config       config.Config
+	googleTokens googleTokenCache
 	// Private test seams. Production always resolves and vets all DNS answers,
 	// then dials the numeric address, so there is no second DNS lookup to rebind.
 	dialContext func(context.Context, string, string) (net.Conn, error)
@@ -171,13 +172,32 @@ func (b *Backend) connectIMAP(ctx context.Context) (*imapSession, error) {
 		done()
 		return nil, ErrUnavailable
 	}
-	if err := client.Login(b.config.Username, b.config.Password).Wait(); err != nil {
+	if err := b.authenticateIMAP(ctx, client); err != nil {
 		client.Close()
 		done()
 		return nil, ErrUnavailable
 	}
 	return &imapSession{client: client, cleanup: done, modified: tracker}, nil
 }
+func (b *Backend) authenticateIMAP(ctx context.Context, client *imapclient.Client) error {
+	if !b.config.UsesGoogleOAuth2() {
+		return client.Login(b.config.Username, b.config.Password).Wait()
+	}
+	if !client.Caps().Has(imap.Cap("AUTH=XOAUTH2")) {
+		return ErrUnavailable
+	}
+	token, err := b.googleToken(ctx)
+	if err != nil {
+		return err
+	}
+	auth := &xoauth2Client{username: b.config.Username, token: token.value}
+	if err := client.Authenticate(auth); err != nil || auth.challenged {
+		b.invalidateGoogleToken(token)
+		return ErrUnavailable
+	}
+	return nil
+}
+
 func (s *imapSession) selectMailbox(folder string, uidValidity uint32) (*imap.SelectData, error) {
 	if !validFolder(folder) {
 		return nil, ErrInvalidInput

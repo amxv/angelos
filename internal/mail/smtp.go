@@ -70,11 +70,16 @@ func (b *Backend) Send(ctx context.Context, envelope Envelope, raw []byte) (Send
 	defer client.Close()
 	client.CommandTimeout = b.config.Timeout
 	client.SubmissionTimeout = b.config.Timeout
-	result.Stage = "authentication"
-	if !client.SupportsAuth("PLAIN") {
+	// STARTTLS construction is lazy in go-smtp: finish its verified handshake
+	// and post-TLS greeting before looking up mechanisms or mailbox tokens.
+	if err := client.Hello("localhost"); err != nil {
 		return result, ErrUnavailable
 	}
-	if err := client.Auth(sasl.NewPlainClient("", b.config.Username, b.config.Password)); err != nil {
+	if state, ok := client.TLSConnectionState(); !ok || !state.HandshakeComplete {
+		return result, ErrUnavailable
+	}
+	result.Stage = "authentication"
+	if err := b.authenticateSMTP(ctx, client); err != nil {
 		return result, ErrUnavailable
 	}
 	result.Stage = "envelope"
@@ -118,4 +123,26 @@ func bareAddress(s string) bool {
 	}
 	parsed, err := stdmail.ParseAddress(s)
 	return err == nil && parsed.Address == s
+}
+
+func (b *Backend) authenticateSMTP(ctx context.Context, client *smtp.Client) error {
+	if !b.config.UsesGoogleOAuth2() {
+		if !client.SupportsAuth("PLAIN") {
+			return ErrUnavailable
+		}
+		return client.Auth(sasl.NewPlainClient("", b.config.Username, b.config.Password))
+	}
+	if !client.SupportsAuth("XOAUTH2") {
+		return ErrUnavailable
+	}
+	token, err := b.googleToken(ctx)
+	if err != nil {
+		return err
+	}
+	auth := &xoauth2Client{username: b.config.Username, token: token.value}
+	if err := client.Auth(auth); err != nil || auth.challenged {
+		b.invalidateGoogleToken(token)
+		return ErrUnavailable
+	}
+	return nil
 }

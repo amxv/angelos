@@ -37,6 +37,8 @@ Natural-composition fixtures also exercise TLS IMAP reads through signed OAuth/M
 
 Status/search regressions cover signed OAuth principal isolation and challenges, read-only lookup with sending disabled, strict receipt projection, unchanged send retention, actual Redis GET-only status scripts and concurrent claims, exact-ID header verification and quotas, participant OR/AND semantics, sparse cursors, and no Seen mutation. Redis script/TTL tests require the configured ephemeral loopback fixture and are included in CI.
 
+Gmail tests use synthetic Google-host TLS certificates and injected loopback transports, never real accounts or refresh grants. Coverage includes IMAP with/without SASL-IR, SMTP TLS/STARTTLS, exact XOAUTH2 payloads, challenge termination, no credential downgrade, verified TLS before credentials, token refresh expiry/cancellation/concurrency/response bounds/redaction, and generation-safe invalidation. Signed MCP fixtures verify duplicate-Sent rejection before claim, one SMTP dispatch without explicit Sent APPEND, deletion guards, localized LIST roles, native MOVE requirements, and preserved legacy-provider behavior.
+
 ## Documentation checks
 
 Run the required commands serially:

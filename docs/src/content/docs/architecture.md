@@ -26,7 +26,7 @@ The official Go MCP SDK handles stateless Streamable HTTP with JSON responses. A
 | --- | --- |
 | `internal/auth` | Protected-resource metadata, token verification, public signing-key cache, and scope checks |
 | `internal/config` | Administrator-configured mailbox credentials and TLS endpoints |
-| `internal/mail` | IMAP reads and guarded mutations, MIME parsing, and SMTP transport |
+| `internal/mail` | IMAP reads and guarded mutations, MIME parsing, SMTP transport, and Gmail token refresh/XOAUTH2 |
 | `internal/compose` | Validated recipient envelope, MIME construction, and immutable content digest |
 | `internal/dispatch` | Owner-bound preparation, atomic send claim, outcome recording, and read-only receipt projection |
 | `internal/app` | MCP tool names, schemas, annotations, and operation boundaries |
@@ -38,13 +38,14 @@ The root Go service is independent of the static `docs/` workspace. Documentatio
 - Mail and folder state live at the IMAP provider.
 - Credentials live in the API environment.
 - Public issuer signing keys have a bounded in-memory cache.
+- Gmail access tokens have an expiry-bounded, credential-bound in-memory cache per backend; Google refresh credentials remain in the server environment. Concurrent connections share a refresh, without automatically retrying mail operations.
 - Prepared sends and dispatch records live in an optional external Redis REST store.
 
 Sending is disabled without that store. A configured store can still serve authorized read-only receipts while sending is disabled. Mailbox reads and ordinary mailbox writes do not require it. A function instance's memory is never used as the sole duplicate-send guard.
 
 ## Deliberate boundaries
 
-Tools cannot choose arbitrary mail hosts or supply credentials. OAuth access to Angelos and the backend's mailbox login are separate credentials with separate purposes.
+Tools cannot choose arbitrary mail hosts or supply credentials. OAuth access to Angelos and the backend's mailbox login are separate credentials with separate purposes. Gmail OAuth uses pinned Google mail and token endpoints; Spacemail/custom transports retain their password flow. No interactive Google callback or Gmail API adapter is included.
 
 UIDVALIDITY guards against stale message identity. Conditional flag updates use CONDSTORE where supported. Other clients can still modify the account concurrently; there is no global mailbox lock or cross-protocol transaction.
 

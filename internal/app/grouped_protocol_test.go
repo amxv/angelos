@@ -182,7 +182,7 @@ func newGroupedBackend() *groupedBackend {
 func (b *groupedBackend) called(name string) { b.calls = append(b.calls, name) }
 func (b *groupedBackend) Capabilities(context.Context) (mail.Capabilities, error) {
 	b.called("capabilities")
-	return mail.Capabilities{IMAP: []string{"IMAP4rev1", "UIDPLUS", "MOVE", "CONDSTORE"}, Move: true, UIDExpunge: true, CondStore: true, SpecialUse: true, SpecialFolders: map[string][]string{"trash": {"Trash"}}}, nil
+	return mail.Capabilities{IMAP: []string{"IMAP4rev1", "UIDPLUS", "MOVE", "CONDSTORE"}, Move: true, UIDExpunge: true, PermanentDelete: true, CondStore: true, SpecialUse: true, SpecialFolders: map[string][]string{"trash": {"Trash"}}}, nil
 }
 func (b *groupedBackend) ListFolders(context.Context) ([]mail.Folder, error) {
 	b.called("folders")

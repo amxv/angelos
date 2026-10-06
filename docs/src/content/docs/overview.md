@@ -14,6 +14,7 @@ Angelos gives an agent a scoped interface to one existing IMAP/SMTP mailbox. It 
 
 - Discover provider capabilities and folders, search mail, and read plain-text content without marking messages read
 - Opt into mailbox organization, including flags, folders, copies, moves, Trash, and saved drafts
+- Connect Gmail/Workspace through owner-provisioned XOAUTH2, with provider-specific safeguards
 - Prepare messages, natural replies/reply-all, and quoted or attached forwards with fully reviewed recipients and attachments
 - Send a reviewed immutable message through a durable, one-time dispatch claim
 

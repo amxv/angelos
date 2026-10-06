@@ -26,6 +26,7 @@ import (
 
 type writeStep struct {
 	contains   string
+	exact      string
 	reply      string // {tag} is replaced with the received command tag.
 	literal    string
 	disconnect bool
@@ -130,6 +131,9 @@ func runWriteScript(conn net.Conn, caps string, steps []writeStep) error {
 		}
 		step := steps[index]
 		index++
+		if step.exact != "" && command != step.exact {
+			return fmt.Errorf("command %d: got %q, want %q", index, command, step.exact)
+		}
 		if !strings.Contains(command, step.contains) {
 			return fmt.Errorf("command %d: got %q, want substring %q", index, command, step.contains)
 		}

@@ -19,18 +19,29 @@ type Endpoint struct {
 	TLSMode string
 }
 type Config struct {
-	Username string `json:"-"`
-	Password string `json:"-"`
-	From     string
-	Aliases  []string `json:"-"`
-	IMAP     Endpoint
-	SMTP     Endpoint
-	Timeout  time.Duration
+	Provider           string
+	AuthMode           string
+	GoogleClientID     string `json:"-"`
+	GoogleClientSecret string `json:"-"`
+	GoogleRefreshToken string `json:"-"`
+	Username           string `json:"-"`
+	Password           string `json:"-"`
+	From               string
+	Aliases            []string `json:"-"`
+	IMAP               Endpoint
+	SMTP               Endpoint
+	Timeout            time.Duration
 }
 
 func LoadFromEnv() (Config, error) { return Load(os.Getenv) }
 func Load(getenv func(string) string) (Config, error) {
-	c := Config{Username: getenv("MAIL_USERNAME"), Password: getenv("MAIL_PASSWORD"), From: getenv("MAIL_FROM"), Timeout: 30 * time.Second}
+	c := Config{
+		Provider: getenv("MAIL_PROVIDER"), AuthMode: getenv("MAIL_AUTH_MODE"),
+		GoogleClientID: getenv("GOOGLE_CLIENT_ID"), GoogleClientSecret: getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRefreshToken: getenv("GOOGLE_REFRESH_TOKEN"),
+		Username:           getenv("MAIL_USERNAME"), Password: getenv("MAIL_PASSWORD"),
+		From: getenv("MAIL_FROM"), Timeout: 30 * time.Second,
+	}
 	if value := getenv("MAIL_ALIASES"); value != "" {
 		if len(value) > 16<<10 || strings.IndexFunc(value, unicode.IsControl) >= 0 {
 			return c, errors.New("invalid MAIL_ALIASES")
@@ -39,12 +50,23 @@ func Load(getenv func(string) string) (Config, error) {
 			c.Aliases = append(c.Aliases, strings.TrimSpace(alias))
 		}
 	}
-	preset := getenv("MAIL_PROVIDER")
-	if preset == "" || preset == "spacemail" {
+	if c.Provider == "" {
+		c.Provider = "spacemail"
+	}
+	if c.AuthMode == "" {
+		c.AuthMode = "password"
+		if c.IsGmail() {
+			c.AuthMode = "google_oauth2"
+		}
+	}
+	if c.Provider == "spacemail" {
 		c.IMAP = Endpoint{"mail.spacemail.com", 993, "tls"}
 		c.SMTP = Endpoint{"mail.spacemail.com", 465, "tls"}
-	} else if preset != "custom" {
-		return c, errors.New("MAIL_PROVIDER must be spacemail or custom")
+	} else if c.IsGmail() {
+		c.IMAP = Endpoint{"imap.gmail.com", 993, "tls"}
+		c.SMTP = Endpoint{"smtp.gmail.com", 465, "tls"}
+	} else if c.Provider != "custom" {
+		return c, errors.New("MAIL_PROVIDER must be spacemail, gmail or custom")
 	}
 	if v := getenv("IMAP_HOST"); v != "" {
 		c.IMAP.Host = v
@@ -94,8 +116,42 @@ func Load(getenv func(string) string) (Config, error) {
 	return c, c.Validate()
 }
 func (c Config) Validate() error {
-	if c.Username == "" || c.Password == "" {
-		return errors.New("MAIL_USERNAME and MAIL_PASSWORD are required")
+	if c.Provider != "" && c.Provider != "spacemail" && c.Provider != "custom" && !c.IsGmail() {
+		return errors.New("invalid MAIL_PROVIDER")
+	}
+	if c.Username == "" {
+		return errors.New("MAIL_USERNAME is required")
+	}
+	if c.IsGmail() {
+		if !bareAddress(c.Username) {
+			return errors.New("Gmail MAIL_USERNAME must be a complete bare email address")
+		}
+		if c.IMAP != (Endpoint{"imap.gmail.com", 993, "tls"}) ||
+			(c.SMTP != (Endpoint{"smtp.gmail.com", 465, "tls"}) && c.SMTP != (Endpoint{"smtp.gmail.com", 587, "starttls"})) {
+			return errors.New("Gmail requires its pinned IMAP and SMTP TLS endpoints")
+		}
+		if !c.UsesGoogleOAuth2() && c.AuthMode != "app_password" {
+			return errors.New("Gmail MAIL_AUTH_MODE must be google_oauth2 or app_password")
+		}
+	} else if c.AuthMode != "" && c.AuthMode != "password" {
+		return errors.New("MAIL_AUTH_MODE requires a compatible provider")
+	}
+	if c.UsesGoogleOAuth2() {
+		if c.Password != "" {
+			return errors.New("MAIL_PASSWORD must be unset for Google OAuth")
+		}
+		for _, value := range []string{c.GoogleClientID, c.GoogleClientSecret, c.GoogleRefreshToken} {
+			if len(value) == 0 || len(value) > 16<<10 || strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) >= 0 {
+				return errors.New("Google OAuth requires valid GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN")
+			}
+		}
+	} else {
+		if c.GoogleClientID != "" || c.GoogleClientSecret != "" || c.GoogleRefreshToken != "" {
+			return errors.New("Google credentials require Gmail google_oauth2 authentication")
+		}
+		if c.Password == "" {
+			return errors.New("MAIL_PASSWORD is required for password authentication")
+		}
 	}
 	if strings.ContainsAny(c.Username, "\r\n\x00") || strings.ContainsAny(c.Password, "\r\n\x00") {
 		return errors.New("invalid mailbox credentials")
@@ -171,4 +227,24 @@ func bareAddress(value string) bool {
 	}
 	a, err := mail.ParseAddress(value)
 	return err == nil && a.Address == value && strings.Contains(value, "@")
+}
+
+// IsGmail identifies the explicit Gmail/Google Workspace preset.
+func (c Config) IsGmail() bool { return c.Provider == "gmail" }
+
+// UsesGoogleOAuth2 retains the Gmail default for programmatic configurations.
+func (c Config) UsesGoogleOAuth2() bool {
+	return c.IsGmail() && (c.AuthMode == "" || c.AuthMode == "google_oauth2")
+}
+
+// IsGmailIMAP applies Gmail mailbox safeguards even to a custom configuration
+// using a known Google hostname. It does not enable Google authentication.
+func (c Config) IsGmailIMAP() bool {
+	return c.IsGmail() || strings.EqualFold(c.IMAP.Host, "imap.gmail.com") || strings.EqualFold(c.IMAP.Host, "imap.googlemail.com")
+}
+
+// SMTPStoresSent identifies Google's automatic Sent storage independently from
+// the configured IMAP service, including known custom Google SMTP endpoints.
+func (c Config) SMTPStoresSent() bool {
+	return c.IsGmail() || strings.EqualFold(c.SMTP.Host, "smtp.gmail.com") || strings.EqualFold(c.SMTP.Host, "smtp.googlemail.com")
 }

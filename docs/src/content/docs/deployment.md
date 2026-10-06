@@ -35,7 +35,7 @@ vercel link
 
 Choose or create a distinct API project and confirm its root directory is the repository root. Check the project selected by the CLI before adding secrets or deploying. Keep `.vercel/` untracked.
 
-Add each required variable from [Configuration](/docs/configuration) to that project's production environment. Prefer Vercel's sensitive environment settings for the mailbox password and any durable-store credentials. Enter secret values interactively instead of placing them in command history:
+Add each required variable from [Configuration](/docs/configuration) to that project's production environment. Prefer Vercel's sensitive environment settings for mailbox passwords, Google client secret/refresh token when applicable, and durable-store credentials. Gmail owners must separately complete the approved manual grant setup in [Gmail and Google Workspace](/docs/gmail-workspace); deployment does not create that grant. Enter secret values interactively instead of placing them in command history:
 
 ```bash
 vercel env add MAIL_PASSWORD production

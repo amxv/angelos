@@ -8,7 +8,7 @@ category: Reference
 
 # Migration and token budget
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0** and **0.4.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The mailbox, authentication, provider configuration, send store, and existing prepared IDs/digests are unchanged.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, and **0.5.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
 
 ## Operation parity
 
@@ -92,3 +92,12 @@ See [Natural replies and forwards](/docs/natural-messages) for exact behavior an
 Refresh discovery for `mail_query` action `send_status` (`prepared_id`), and optional search `message_id`/`participant` filters. There are six tools and 19 operations. Default searches and their existing cursor serialization are preserved; new filter values bind their cursors. Exact-ID search verifies complete case-preserved headers, while participant search is explicitly a substring operator across visible address fields.
 
 Send-status inspection is read-only, requires `mail.read` plus `mail.send`, and works with a valid store even when sends are disabled. New records bind ownership to the verified issuer/resource/subject. Older unowned receipts remain unavailable to this new lookup; their existing exact-ID/digest send behavior and TTLs are unchanged. See the [receipt reference](/docs/tools#inspect-a-send-receipt-without-sending) and [ownership model](/docs/authentication#preparation-ownership).
+
+
+## Version 0.5 Gmail/Workspace compatibility
+
+The six tools and 19 operations remain unchanged. Refresh discovery for Gmail-specific constraints. `MAIL_PROVIDER=gmail` defaults to server-side Google XOAUTH2; existing Spacemail/custom password configurations remain valid. Google mailbox OAuth is separate from MCP-client OAuth and requires owner-provisioned credentials. See [Gmail and Google Workspace](/docs/gmail-workspace) for setup and public-verification limits.
+
+Capabilities now include `server.gmail_labels`, `server.permanent_delete`, and `server.smtp_stores_sent`, plus top-level `smtp_stores_sent` and an applicable `permanent_delete_restriction`. Top-level `permanent_delete_enabled` reflects write/delete gates and safe provider support, rather than only the configured delete switch. UID EXPUNGE support alone does not imply Gmail permanent-delete availability.
+
+Gmail callers must pass `append_sent: false`; true is rejected before claim/SMTP. Gmail permanent deletion is disabled regardless of the gate. Special roles are discovered from LIST attributes even when SPECIAL-USE is not advertised; All Mail is not guessed as Archive. No Gmail label or raw-search dialect is added.

@@ -126,7 +126,13 @@ func (b *Backend) Capabilities(ctx context.Context) (Capabilities, error) {
 	out.UIDExpunge = caps.Has(imap.CapUIDPlus)
 	out.CondStore = caps.Has(imap.CapCondStore)
 	out.SpecialUse = caps.Has(imap.CapSpecialUse)
+	out.GmailLabels = b.config.IsGmailIMAP() || caps.Has(imap.Cap("X-GM-EXT-1"))
+	out.PermanentDelete = out.UIDExpunge && !out.GmailLabels
+	// SMTP filing policy is not inferred from the IMAP endpoint or extensions:
+	// custom deployments may submit through an unrelated SMTP provider.
+	out.SMTPStoresSent = b.config.SMTPStoresSent()
 	out.SpecialFolders, err = discoverSpecialFolders(s)
+	out.SpecialUse = out.SpecialUse || len(out.SpecialFolders) != 0
 	return out, err
 }
 
@@ -542,6 +548,9 @@ func (b *Backend) AppendDraft(ctx context.Context, folder string, raw []byte) (M
 // A failure here must be reported as a filing failure, never retried by sending
 // SMTP again. This helper never sends mail and never guesses the Sent folder.
 func (b *Backend) AppendSent(ctx context.Context, raw []byte) (MutationResult, error) {
+	if b.config.SMTPStoresSent() {
+		return MutationResult{Status: "not_applied"}, ErrAutomaticSent
+	}
 	return b.appendRaw(ctx, "", "sent", raw, []imap.Flag{imap.FlagSeen})
 }
 
@@ -595,6 +604,11 @@ func (b *Backend) appendRaw(ctx context.Context, folder, role string, raw []byte
 // Mail marked Deleted. The caller must separately authorize permanent deletion.
 func (b *Backend) Delete(ctx context.Context, ref Reference) (MutationResult, error) {
 	out := MutationResult{Source: &ref, Status: "not_applied"}
+	// Gmail's autoExpunge and last-label settings vary; even setting Deleted
+	// may immediately archive, trash, or delete. Never start that workflow.
+	if b.config.IsGmailIMAP() {
+		return out, ErrGmailDelete
+	}
 	if !validWriteReference(ref) {
 		return out, ErrInvalidInput
 	}
@@ -603,6 +617,10 @@ func (b *Backend) Delete(ctx context.Context, ref Reference) (MutationResult, er
 		return out, err
 	}
 	defer s.close()
+	// Also protect custom endpoints which identify themselves as Gmail.
+	if s.client.Caps().Has(imap.Cap("X-GM-EXT-1")) {
+		return out, ErrGmailDelete
+	}
 	if !s.client.Caps().Has(imap.CapUIDPlus) {
 		return out, ErrUnsupported
 	}

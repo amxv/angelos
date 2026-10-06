@@ -6,6 +6,7 @@ The repository is private while under active development and is intended to be o
 
 ## Capabilities
 
+- Gmail/Workspace XOAUTH2 for personal/internal use, with pinned hosts and conservative Sent/delete safeguards
 - Six risk-separated MCP tools cover 19 operations with compact schemas and optional full-detail read/search results
 - Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
 - Inspect provider capabilities, discover folders, search, and read mail without marking it read
@@ -14,7 +15,7 @@ The repository is private while under active development and is intended to be o
 - Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
 - Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
 
-Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. Existing clients should follow the [0.2 migration guide](./docs/src/content/docs/tool-migration.md). See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
+Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. Existing clients should follow the [tool migration guide](./docs/src/content/docs/tool-migration.md). See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
 
 ## Run and test
 

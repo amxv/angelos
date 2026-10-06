@@ -20,7 +20,7 @@ import (
 )
 
 // Version identifies the public MCP interface and HTTP service build.
-const Version = "0.4.0"
+const Version = "0.5.0"
 
 type Submitter interface {
 	Send(context.Context, mail.Envelope, []byte) (mail.SendResult, error)
@@ -131,6 +131,11 @@ func preview(p compose.Prepared) result {
 	return result{"prepared_id": p.ID, "digest": p.Digest, "from": p.From, "to": p.To, "cc": p.Cc, "bcc": p.Bcc, "subject": p.Subject, "text": p.Text, "html": p.HTML, "warnings": p.Warnings, "attachments": p.Attachments, "message_id": p.MessageID, "expires_at": p.ExpiresAt, "encoded_bytes": len(p.Raw), "status": "prepared", "confirmation": "Review this exact message with the user before mail_send_confirmed. Changed content needs a new preparation."}
 }
 func (a *App) send(ctx context.Context, in sendInput) (any, error) {
+	// Keep duplicate-Sent rejection before the durable one-time claim, even
+	// when send is called independently of the MCP adapter.
+	if in.AppendSent && a.Config.SMTPStoresSent() {
+		return nil, errors.New("Gmail SMTP saves Sent automatically; use append_sent=false; no message was sent")
+	}
 	rec, claimed, e := a.Store.Claim(ctx, in.PreparedID, in.ConfirmedDigest, auth.PrincipalBinding(ctx), time.Now())
 	if e != nil {
 		return nil, e
@@ -207,6 +212,9 @@ func (a *App) Handler() http.Handler {
 func (a *App) authorizeSent(ctx context.Context, in sendInput) error {
 	if !in.AppendSent {
 		return nil
+	}
+	if a.Config.SMTPStoresSent() {
+		return errors.New("Gmail SMTP saves Sent automatically; use append_sent=false; no message was sent")
 	}
 	if !a.EnableWrites {
 		return errors.New("Sent filing requires mailbox writes to be enabled; no message was sent")

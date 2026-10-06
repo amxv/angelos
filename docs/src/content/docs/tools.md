@@ -14,7 +14,7 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.4.0 exposes six tools for all 17 original operations plus reply-all and read-only send-status inspection. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
+Angelos 0.5.0 exposes six tools for all 17 original operations plus reply-all and read-only send-status inspection. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ Call `mail_query` with one of these actions:
 
 | Action | Arguments beyond `action` | Result |
 | --- | --- | --- |
-| `capabilities` | None | IMAP capabilities, discovered special folders, deployment gates |
+| `capabilities` | None | IMAP capabilities, discovered special folders, effective gates, Gmail label/Sent/delete constraints |
 | `folders` | None | Exact folder names, hierarchy delimiters, attributes |
 | `search` | Optional `search` object below, `detail` | Message summaries, UIDVALIDITY, scan size, optional next cursor |
 | `read` | `reference`, optional `detail` | Text, selected headers, flags, attachment metadata, truncation warnings |
@@ -147,11 +147,11 @@ Flag operations accept `add` or `remove`, with `\Seen`, `\Answered`, `\Flagged`,
 
 Where CONDSTORE is available, read/search results include `modseq`, and the server snapshots the message's MODSEQ before applying a conditional flag change. Pass the previously observed value as `unchanged_since` to guard against changes since that read. A supplied precondition requires that capability. Without CONDSTORE, a delta can proceed with a warning that no concurrency precondition was enforced. Reread after conflicts.
 
-Move and Trash require native MOVE support. Trash and implicit Drafts/Sent folder selection require a unique server-advertised SPECIAL-USE folder. Names are never guessed. A copy/move with server acceptance but no valid destination UID mapping returns `accepted` and a verification warning: a concurrently disappeared source can make the command an accepted no-op. Search the destination before taking another action. An append without a returned UID similarly requires a fresh search.
+Move and Trash require native MOVE support. Trash and implicit Drafts/Sent folder selection require a unique server-advertised SPECIAL-USE folder. Names are never guessed. Actual LIST role attributes are honored even without a SPECIAL-USE capability advertisement. Gmail labels overlap, and All Mail is not treated as Archive. A copy/move with server acceptance but no valid destination UID mapping returns `accepted` and a verification warning: a concurrently disappeared source can make the command an accepted no-op. Search the destination before taking another action. An append without a returned UID similarly requires a fresh search.
 
 Draft saving creates a new message and does not replace an older draft. Its `message` uses the composition shape below. BCC is preserved in the private IMAP draft so another mail client can edit it. An omitted folder selects the discovered Drafts folder. Updating a draft is a deliberate new-save and separate old-message cleanup, with possible concurrent-client effects.
 
-Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-action user confirmation in the trusted client, and targeted UID EXPUNGE support. There is no ordinary mailbox-wide EXPUNGE, folder deletion, or deletion-on-close operation. An interrupted delete can leave a message marked Deleted without confirmed removal; inspect the account before retrying.
+Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-action user confirmation in the trusted client, and targeted UID EXPUNGE support. There is no ordinary mailbox-wide EXPUNGE, folder deletion, or deletion-on-close operation. An interrupted delete can leave a message marked Deleted without confirmed removal; inspect the account before retrying. Gmail/Workspace permanent deletion is unavailable even with that gate: its label UID removal does not prove account-wide deletion. The Gmail preset, known Gmail IMAP hosts, and servers advertising X-GM-EXT-1 are guarded before Deleted/EXPUNGE mutation.
 
 ## Prepare and send
 
@@ -192,10 +192,10 @@ Replies quote source text with author/date attribution by default; `quote_origin
 
 Preparation returns `prepared_id`, `digest`, full recipient arrays including BCC, subject, complete text and HTML, attachment hashes, Message-ID, byte size, and expiry. Source-based preparations also identify the source, threading, quotation/original mode, selected and omitted source attachments, and warnings. Review that exact content with the owner. Preparation expires after 15 minutes. Any change needs a new preparation and approval.
 
-After approval, pass the exact ID/digest pair to `mail_send_confirmed`. Set `append_sent` deliberately: `true` requests a separate IMAP Sent-folder copy after SMTP acceptance and requires both `mail.write` and `MAIL_ENABLE_WRITES=1`; missing filing permission rejects the request before any send. A provider may already save sent mail; enabling the copy can create duplicates. Failure to save a Sent copy does not undo sending and is not a reason to resend.
+After approval, pass the exact ID/digest pair to `mail_send_confirmed`. Set `append_sent` deliberately: `true` requests a separate IMAP Sent-folder copy after SMTP acceptance and requires both `mail.write` and `MAIL_ENABLE_WRITES=1`; missing filing permission rejects the request before any send. Gmail SMTP saves sent mail automatically: `append_sent: true` is rejected before consuming the preparation or sending. Use `false`. Other providers may also save sent mail; enabling the copy can create duplicates. Failure to save a Sent copy does not undo sending and is not a reason to resend.
 
 Repeated calls for a consumed ID return its recorded status without another SMTP attempt. `accepted` means SMTP acceptance only. Investigate `sending`, `unknown`, and persistence warnings before considering a new message. The host remains responsible for human confirmation; the digest is a content binding, not evidence of a human click.
 
 ## Outside the current surface
 
-There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, sorting by subject/sent date, active HTML rendering, bulk global expunge, folder deletion, or OAuth login to the upstream mail provider. Provider presets beyond Spacemail are intentionally kept to explicit generic settings for now.
+There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, sorting by subject/sent date, active HTML rendering, bulk global expunge, or folder deletion. Gmail/Workspace has server-side XOAUTH2 with owner-provisioned credentials, not an interactive consent UI. Gmail API transport, label APIs, X-GM-RAW queries, global message/thread IDs, and service-account delegation are not exposed. Other OAuth mail providers require an implementation change. See [Gmail and Google Workspace](/docs/gmail-workspace).

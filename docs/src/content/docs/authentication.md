@@ -8,7 +8,9 @@ category: Guides
 
 # Authentication
 
-Angelos is an OAuth resource server. It verifies access tokens issued by an existing authorization server. It does not provide sign-in pages, issue tokens, register OAuth clients, or store refresh tokens.
+For MCP clients, Angelos is an OAuth resource server. It verifies access tokens issued by an existing authorization server. It does not provide sign-in pages, issue MCP tokens, register OAuth clients, or store MCP-client refresh tokens.
+
+Mailbox authentication is a separate system: the Gmail preset uses an owner-provisioned Google refresh token on the server to obtain IMAP/SMTP access tokens. That Google grant cannot authenticate an MCP call or replace this issuer configuration. See [Gmail and Google Workspace](/docs/gmail-workspace) for its broader scope and setup restrictions.
 
 Every MCP request, including initialization and tool discovery, requires an access token. There is no anonymous mode, static API-key mode, or development authentication bypass.
 

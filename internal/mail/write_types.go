@@ -9,17 +9,25 @@ var (
 	ErrUnsupported    = errors.New("mail server does not support this operation safely")
 	ErrConflict       = errors.New("message changed concurrently; read it again before changing flags")
 	ErrOutcomeUnknown = errors.New("mail change may have succeeded; verify its outcome before retrying")
+	ErrGmailDelete    = errors.New("permanent deletion is unsupported for Gmail/Workspace; label UID removal does not prove account-wide deletion")
+	ErrAutomaticSent  = errors.New("Gmail SMTP saves Sent automatically; explicit Sent filing is disabled")
 )
 
 // Capabilities describes server features, not the permissions granted to a token.
 // SpecialFolders lists the exact server-advertised names, including ambiguities.
+// PermanentDelete combines protocol support with provider policy; the selected
+// mailbox and the caller's write/delete gates still need separate checks.
+// SMTPStoresSent describes the SMTP configuration, never an IMAP inference.
 type Capabilities struct {
-	IMAP           []string            `json:"imap"`
-	Move           bool                `json:"move"`
-	UIDExpunge     bool                `json:"uid_expunge"`
-	CondStore      bool                `json:"condstore"`
-	SpecialUse     bool                `json:"special_use"`
-	SpecialFolders map[string][]string `json:"special_folders"`
+	IMAP            []string            `json:"imap"`
+	Move            bool                `json:"move"`
+	UIDExpunge      bool                `json:"uid_expunge"`
+	CondStore       bool                `json:"condstore"`
+	SpecialUse      bool                `json:"special_use"`
+	SpecialFolders  map[string][]string `json:"special_folders"`
+	GmailLabels     bool                `json:"gmail_labels"`
+	PermanentDelete bool                `json:"permanent_delete"`
+	SMTPStoresSent  bool                `json:"smtp_stores_sent"`
 }
 
 // FlagRequest deliberately supports deltas only. Replacing all flags would
