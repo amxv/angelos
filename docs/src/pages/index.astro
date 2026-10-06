@@ -1,0 +1,62 @@
+---
+import BaseLayout from "zuedocs/layouts/BaseLayout.astro";
+import { getCollection } from "astro:content";
+import { primaryNav, siteConfig } from "../data/docs";
+
+const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout
+  title={`${siteConfig.name} | ${siteConfig.strapline}`}
+  description={siteConfig.description}
+  siteConfig={siteConfig}
+  primaryNav={primaryNav}
+>
+  <section class="hero shell">
+    <div class="hero__copy">
+      <p class="section-label">Agent-native email</p>
+      <h1>Give agents a clean interface to work with email.</h1>
+      <p class="hero__lede">
+        Angelos is being built as an email layer for agents: a place to document the contracts,
+        workflows, permissions, and operational behavior that let agents send, receive, and act on email.
+      </p>
+      <div class="hero__actions">
+        <a class="button button--solid" href="/docs/overview">Read the overview</a>
+        <a class="button button--ghost" href="/docs">Browse the docs</a>
+      </div>
+    </div>
+    <aside class="hero__panel">
+      <p class="hero__panel-label">Docs from day one</p>
+      <ul class="hero__signal-list">
+        <li>Document behavior next to the code that implements it.</li>
+        <li>Keep architecture and security contracts explicit as they emerge.</li>
+        <li>Publish documentation automatically from the main branch.</li>
+      </ul>
+      <div class="hero__terminal">
+        <span>$ cd docs</span>
+        <span>$ bun run dev</span>
+        <span>$ bun run check</span>
+      </div>
+    </aside>
+  </section>
+
+  <section class="shell docs-teaser">
+    <div class="section-heading">
+      <p class="section-label">Documentation</p>
+      <h2>A living map of Angelos as the implementation takes shape.</h2>
+      <p>
+        The initial pages establish the documentation structure without locking in product details
+        that have not been implemented yet.
+      </p>
+    </div>
+    <div class="docs-teaser__grid">
+      {docs.map((entry) => (
+        <a class="docs-teaser__card" href={`/docs/${entry.id}`}>
+          <span>{entry.data.category}</span>
+          <h3>{entry.data.title}</h3>
+          <p>{entry.data.summary ?? entry.data.description}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</BaseLayout>
