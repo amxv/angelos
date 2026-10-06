@@ -19,7 +19,10 @@ jobs:
           go-version: '1.27.1'
           cache: false
       - run: go mod tidy && git diff --exit-code -- go.mod go.sum
-      - run: test -z "$(gofmt -l .)"
+      - run: |
+          gofmt -l .
+          gofmt -d .
+          test -z "$(gofmt -l .)"
       - run: go test -race -cover ./...
       - run: go vet ./...
       - run: go build ./...
