@@ -49,9 +49,12 @@ type modifyInput struct {
 	New            string         `json:"new,omitempty"`
 }
 type prepareInput struct {
-	Action    string         `json:"action"`
-	Message   compose.Input  `json:"message"`
-	Reference mail.Reference `json:"reference,omitempty"`
+	Action            string         `json:"action"`
+	Message           compose.Input  `json:"message"`
+	Reference         mail.Reference `json:"reference,omitempty"`
+	QuoteOriginal     *bool          `json:"quote_original,omitempty"`
+	OriginalMode      string         `json:"original_mode,omitempty"`
+	AttachmentIndexes []int          `json:"attachment_indexes,omitempty"`
 }
 
 type actionRule struct{ required, optional string }
@@ -77,9 +80,10 @@ var actions = map[string]map[string]actionRule{
 		"trash":  {required: "reference"},
 	},
 	"mail_prepare": {
-		"new":     {required: "message"},
-		"reply":   {required: "reference message"},
-		"forward": {required: "reference message"},
+		"new":       {required: "message"},
+		"reply":     {required: "reference message", optional: "quote_original"},
+		"reply_all": {required: "reference message", optional: "quote_original"},
+		"forward":   {required: "reference message", optional: "quote_original original_mode attachment_indexes"},
 	},
 }
 
@@ -116,6 +120,14 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		p.Required = nil
 		p.Properties["order"].Enum = []any{"", "newest", "oldest"}
 		p.Properties["order"].Description = "UID arrival order; newest is default"
+	}
+	if p := schema.Properties["original_mode"]; p != nil {
+		p.Enum = []any{"", "quoted", "eml", "none"}
+	}
+	if p := schema.Properties["message"]; p != nil {
+		// Recipients may be derived for replies, and HTML-only commentary is
+		// supported. Runtime composition still enforces send recipients.
+		p.Required = nil
 	}
 	t.InputSchema = schema
 	register(s, a, t, scope, fn)
@@ -157,6 +169,17 @@ func validateAction(name string, raw json.RawMessage) error {
 			return fmt.Errorf("%s must not be null", k)
 		}
 	}
+	if value, present := fields["message"]; present {
+		var messageFields map[string]json.RawMessage
+		if err := json.Unmarshal(value, &messageFields); err != nil {
+			return errors.New("invalid message fields")
+		}
+		for key, value := range messageFields {
+			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return fmt.Errorf("message.%s must not be null; omit derived fields or use [] to clear a recipient list", key)
+			}
+		}
+	}
 	return nil
 }
 
@@ -170,7 +193,7 @@ func (a *App) registerTools(s *mcp.Server) {
 		}
 		return a.Mail.Delete(ctx, in)
 	})
-	grouped(s, a, tool("mail_prepare", "Persist an immutable new message, reply, or inline forward for 15 minutes; does NOT send. Supply recipients explicitly after reviewing source From/Reply-To. Replies retain threading; forwards exclude original attachments unless supplied. Review the exact full returned payload including BCC and attachment hashes before mail_send_confirmed. Requires send scope/store.", false, false, false), "mail.send", a.prepare)
+	grouped(s, a, tool("mail_prepare", "Persist an immutable message for 15 minutes; does NOT send. Replies derive omitted To; reply_all also derives Cc. Explicit lists replace; [] clears, null is rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed; other headers/files retained), none. attachment_indexes selects source files. Review full text/HTML, recipients, BCC, warnings and hashes before mail_send_confirmed. Requires send scope/store.", false, false, false), "mail.send", a.prepare)
 	register(s, a, tool("mail_send_confirmed", "Send only the exact prepared ID/digest after user approval of its full payload. Durable one-time claim. accepted is SMTP acceptance, not delivery. Never retry or prepare a duplicate for sending/unknown. Host confirmation is a trusted-client boundary, not proof of a human click. append_sent also requires write authority.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
 		if e := a.authorizeSent(ctx, in); e != nil {
 			return nil, e
@@ -242,8 +265,8 @@ func (a *App) modify(ctx context.Context, in modifyInput) (any, error) {
 	return nil, errors.New("unsupported action")
 }
 func (a *App) prepare(ctx context.Context, in prepareInput) (any, error) {
-	if in.Action == "reply" || in.Action == "forward" {
-		return a.prepareReply(ctx, replyInput{in.Reference, in.Message}, in.Action == "forward")
+	if in.Action == "reply" || in.Action == "reply_all" || in.Action == "forward" {
+		return a.prepareSource(ctx, in)
 	}
 	if in.Action != "new" {
 		return nil, errors.New("unsupported action")

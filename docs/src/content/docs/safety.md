@@ -32,7 +32,7 @@ MCP tool annotations describe effects to the host. The trusted MCP client must o
 
 In particular, a digest echoed by a model proves that supplied content matches a prepared message. It does not prove a human clicked an approval button. Only connect a client you trust to enforce its confirmation rules. This implementation does not provide an independent human-approval web UI.
 
-For sending, review all recipients including CC and BCC, the subject, body, attachments, and reply/forward context. If any content or destination changes, prepare and review a new message. A reusable draft or previous approval does not authorize unrelated mail.
+For sending, review all recipients including CC and BCC, the subject, complete text and HTML bodies, attachments, and reply/forward context. Derived reply recipients are suggestions until that review. Explicit attached-EML forwarding includes original headers and attachments; only outer Bcc/Resent-Bcc fields are removed, and embedded attachments may still contain private data. If any content or destination changes, prepare and review a new message. A reusable draft or previous approval does not authorize unrelated mail.
 
 ## Prepared messages and duplicate protection
 
@@ -52,7 +52,7 @@ A connection can fail after the server accepted the message but before Angelos r
 
 Mailbox credentials stay in the API environment and are used only to authenticate to the configured provider. Tool arguments cannot redirect those credentials to another server.
 
-The durable send store receives the full prepared message, its recipients, and attachment bytes. Choose a store and account suitable for that private data. An unclaimed preparation expires after 15 minutes. At the atomic dispatch claim, the stored body, wire bytes, recipients, subject, and attachment data are replaced with a minimal record containing the preparation ID, digest, Message-ID, expiry, and status. That record is retained for seven days; completion adds the outcome and stage.
+The durable send store receives the full prepared message, its recipients, and attachment bytes. Choose a store and account suitable for that private data. An unclaimed preparation expires after 15 minutes. At the atomic dispatch claim, the stored text and HTML bodies, wire bytes, recipients, subject, and attachment data are replaced with a minimal record containing the preparation ID, digest, Message-ID, expiry, and status. That record is retained for seven days; completion adds the outcome and stage.
 
 The dispatching process holds the claimed payload long enough to attempt SMTP and, if requested, save a Sent copy. If it exits after the claim, the record remains consumed and the message must not be automatically resent. Provider backups and logs can have their own retention policies beyond Redis key expiry.
 

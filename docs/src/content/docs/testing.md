@@ -33,6 +33,8 @@ For an additional bounded MIME fuzz pass (seed cases also run in ordinary tests)
 go test ./internal/mail -run '^$' -fuzz FuzzParseMessageAttachment -fuzztime=30s -parallel=2
 ```
 
+Natural-composition fixtures also exercise TLS IMAP reads through signed OAuth/MCP calls, source headers longer than compact read output, reply-all routing and aliases, exact Message-ID case, text/HTML alternatives, byte-accurate EML and selected attachments, privacy, explicit-null rejection, and preparation without SMTP dispatch.
+
 ## Documentation checks
 
 Run the required commands serially:

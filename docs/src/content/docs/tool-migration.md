@@ -8,7 +8,7 @@ category: Reference
 
 # Migration and token budget
 
-The MCP implementation version is now **0.2.0**. This is a breaking tool-name/input-layout change. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The mailbox, authentication, provider configuration, send store, and existing prepared IDs/digests are unchanged.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Version **0.3.0** retains those six names and adds the preparation features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The mailbox, authentication, provider configuration, send store, and existing prepared IDs/digests are unchanged.
 
 ## Operation parity
 
@@ -76,3 +76,12 @@ Read-only operations, non-destructive mailbox additions, destructive mailbox cha
 Compact search pages retain cursor/freshness information, UIDVALIDITY, UID, flags, and exact MODSEQ values. Compact reads retain safe headers including Reply-To, metadata, warnings, and backend truncation state. A clipped text preview points to `detail: "full"`; full mode recovers all previously available read/search fields. [The tool reference](/docs/tools) describes reconstruction and empty-field semantics.
 
 Mutation errors retain partial outcomes and `retry_safe`; ambiguous writes and send outcomes must not be retried blindly. To/Cc/Bcc, full message text, attachment hashes, immutable digests, expiry, durable one-time claims, and the separate Sent-filing permission check are unchanged. Grouping tools does not grant permission to send or mutate mail.
+
+
+## Version 0.3 preparation additions
+
+Refresh discovery again for `mail_prepare` action `reply_all`, optional authored HTML, quotation control, selected source attachment indexes, and quoted/EML/omitted-original forward modes. The six tool names and all earlier operation routes remain available.
+
+For replies, omitted To/Cc can now be derived from complete source metadata and configured self aliases. Explicit arrays keep replacement semantics; `[]` clears a field and `null` is rejected. Reply quotations are now included by default; set `quote_original: false` to retain an authored-body-only reply. Existing explicitly supplied recipients, full previews, approval digests, and consumed-send behavior remain intact. Review both body alternatives before sending.
+
+See [Natural replies and forwards](/docs/natural-messages) for exact behavior and privacy limits. The version 0.2 size measurements above are historical snapshots; additional version 0.3 functionality remains covered by the repository's compact discovery regression budget.

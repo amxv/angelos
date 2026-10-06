@@ -14,7 +14,7 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.2.0 exposes six tools for the same 17 operations. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access. There is no arbitrary command input.
+Angelos 0.3.0 exposes six tools for all 17 original operations plus reply-all. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -123,8 +123,9 @@ All preparation and send tools require `mail.send`, `MAIL_ENABLE_SEND=1`, and th
 | Tool / action | Arguments beyond `action` | Behavior |
 | --- | --- | --- |
 | `mail_prepare` / `new` | `message` | Persist an immutable message and return its review payload |
-| `mail_prepare` / `reply` | `reference`, `message` | Prepare a reply with threading headers from the source |
-| `mail_prepare` / `forward` | `reference`, `message` | Prepare an inline plain-text forward |
+| `mail_prepare` / `reply` | `reference`, `message`, optional `quote_original` | Derive omitted recipients and prepare a threaded reply |
+| `mail_prepare` / `reply_all` | `reference`, `message`, optional `quote_original` | Include visible source participants, excluding configured self addresses |
+| `mail_prepare` / `forward` | `reference`, `message`, optional `original_mode`, `quote_original`, `attachment_indexes` | Prepare a quoted, attached-EML, or original-omitted forward |
 | `mail_send_confirmed` (no action) | `prepared_id`, `confirmed_digest`, `append_sent` | Claim once and send the exact prepared bytes |
 
 ### Composition shape
@@ -142,15 +143,17 @@ Place these fields inside `message` for all preparation actions and draft saving
 }
 ```
 
-Optional attachments contain `filename`, `content_type`, and `data_base64`. Optional `in_reply_to` and `references` contain angle-bracketed Message-IDs. Sender identity comes from `MAIL_FROM` and cannot be chosen by the tool caller.
+Optional `html` supplies an authored HTML alternative. An omitted plain body is derived from that HTML before quoting, without loading resources. Both final alternatives appear in the preparation preview. Optional attachments contain `filename`, `content_type`, and `data_base64`; valid content-type parameters such as charset are preserved. Optional `in_reply_to` and `references` contain angle-bracketed Message-IDs. Sender identity comes from `MAIL_FROM` and cannot be chosen by the tool caller.
 
-Limits are 50 total recipients, 512 subject bytes, 1 MiB of text, 20 attachments, 3 MiB of total decoded attachment bytes, and 5 MiB of complete encoded MIME. Internationalized SMTPUTF8 address mailboxes are unsupported. Infrastructure request/response limits may be lower than these application limits; base64 increases payload size.
+Limits are 50 total recipients, 512 subject bytes, 1 MiB per text/HTML alternative, 20 attachments, 3 MiB of total decoded attachment bytes, and 5 MiB of complete encoded MIME. Internationalized SMTPUTF8 address mailboxes are unsupported. Infrastructure request/response limits may be lower than these application limits; base64 increases payload size.
 
-Replies require explicit recipients, even when the original has Reply-To or From headers. Review those addresses before preparing. Reply-All selection is a client decision. Forwards include the source's plain text, but do not silently copy original attachments. Retrieve and explicitly include any desired attachments. Truncated source messages are rejected for reply/forward preparation.
+Replies derive an omitted `message.to` from source Reply-To, then From. `reply_all` also derives an omitted `message.cc` from visible source To/Cc, excluding the sender and configured self addresses. Explicit arrays replace those fields; `[]` deliberately clears a field, while `null` is invalid. BCC is never inherited. Review the full resulting recipients before sending.
+
+Replies quote source text with author/date attribution by default; `quote_original: false` omits the quotation. Forward `original_mode` is `quoted` by default, `eml` for an explicitly attached original, or `none` to omit it. Do not combine `quote_original` with `eml` or `none`. Source attachments are included only by explicit `attachment_indexes`, new `message.attachments`, or the explicit EML mode. Truncated source messages are rejected for reply/forward preparation. See [Natural replies and forwards](/docs/natural-messages) for exact selection, privacy, threading, and MIME behavior.
 
 ### Approval and dispatch
 
-Preparation returns `prepared_id`, `digest`, full recipient arrays including BCC, subject, text, attachment hashes, Message-ID, byte size, and expiry. Review that exact content with the owner. Preparation expires after 15 minutes. Any change needs a new preparation and approval.
+Preparation returns `prepared_id`, `digest`, full recipient arrays including BCC, subject, complete text and HTML, attachment hashes, Message-ID, byte size, and expiry. Source-based preparations also identify the source, threading, quotation/original mode, selected and omitted source attachments, and warnings. Review that exact content with the owner. Preparation expires after 15 minutes. Any change needs a new preparation and approval.
 
 After approval, pass the exact ID/digest pair to `mail_send_confirmed`. Set `append_sent` deliberately: `true` requests a separate IMAP Sent-folder copy after SMTP acceptance and requires both `mail.write` and `MAIL_ENABLE_WRITES=1`; missing filing permission rejects the request before any send. A provider may already save sent mail; enabling the copy can create duplicates. Failure to save a Sent copy does not undo sending and is not a reason to resend.
 

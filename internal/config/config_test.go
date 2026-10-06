@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -43,5 +44,37 @@ func TestConfigErrorsDoNotContainSecrets(t *testing.T) {
 	_, e := Load(env(map[string]string{"MAIL_USERNAME": "person@example.com", "MAIL_PASSWORD": "super-secret", "SMTP_TLS_MODE": "plain"}))
 	if e == nil || strings.Contains(e.Error(), "super-secret") {
 		t.Fatal("bad error")
+	}
+}
+
+func TestAliasesAreBoundedBareUniqueAndOnlySelfIdentities(t *testing.T) {
+	values := map[string]string{"MAIL_USERNAME": "login@example.com", "MAIL_PASSWORD": "test-only", "MAIL_FROM": "sender@example.com", "MAIL_ALIASES": " alias@example.com,Other@example.com "}
+	c, err := Load(env(values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(c.SelfAddresses(), ","); got != "sender@example.com,login@example.com,alias@example.com,Other@example.com" {
+		t.Fatal(got)
+	}
+	if c.From != "sender@example.com" || c.Username != "login@example.com" {
+		t.Fatal("aliases changed sender authority")
+	}
+	for _, aliases := range []string{" ", ",", "alias@example.com,", "alias@example.com,,other@example.com", "Name <alias@example.com>", "alias@example.com,ALIAS@example.com", "alias@example.com\r\nBcc:x@example.com", "alias@example.com\x00", "\talias@example.com", "alias@example.com\v", "é@example.com", strings.Repeat("a", 255) + "@example.com"} {
+		values["MAIL_ALIASES"] = aliases
+		if _, err := Load(env(values)); err == nil {
+			t.Errorf("accepted invalid aliases %q", aliases)
+		}
+	}
+	var aliases []string
+	for i := 0; i < 51; i++ {
+		aliases = append(aliases, fmt.Sprintf("alias%d@example.com", i))
+	}
+	values["MAIL_ALIASES"] = strings.Join(aliases, ",")
+	if _, err := Load(env(values)); err == nil {
+		t.Fatal("accepted 51 aliases")
+	}
+	c.Username = "account-login"
+	if strings.Contains(strings.Join(c.SelfAddresses(), ","), "account-login") {
+		t.Fatal("non-address login used as self identity")
 	}
 }

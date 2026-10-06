@@ -173,7 +173,7 @@ func (r *Redis) Claim(ctx context.Context, id, digest string, now time.Time) (Re
 	return rec, parts[0] == "claimed", nil
 }
 
-const completeScript = `local v=redis.call('GET',KEYS[1]); if not v then return 0 end; local r=cjson.decode(v); if r.status ~= 'sending' then return 0 end; r.status=ARGV[1]; r.detail=ARGV[2]; r.message.raw=nil; r.message.text=nil; r.message.recipients=nil; r.message.to=nil; r.message.cc=nil; r.message.bcc=nil; r.message.attachments=nil; redis.call('SET',KEYS[1],cjson.encode(r),'EX',604800); return 1`
+const completeScript = `local v=redis.call('GET',KEYS[1]); if not v then return 0 end; local r=cjson.decode(v); if r.status ~= 'sending' then return 0 end; r.status=ARGV[1]; r.detail=ARGV[2]; r.message.raw=nil; r.message.text=nil; r.message.html=nil; r.message.recipients=nil; r.message.to=nil; r.message.cc=nil; r.message.bcc=nil; r.message.attachments=nil; redis.call('SET',KEYS[1],cjson.encode(r),'EX',604800); return 1`
 
 func (r *Redis) Complete(ctx context.Context, id, status, detail string) error {
 	k, e := key(id)

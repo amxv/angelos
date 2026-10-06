@@ -14,7 +14,7 @@ Angelos gives an agent a scoped interface to one existing IMAP/SMTP mailbox. It 
 
 - Discover provider capabilities and folders, search mail, and read plain-text content without marking messages read
 - Opt into mailbox organization, including flags, folders, copies, moves, Trash, and saved drafts
-- Prepare messages, replies, and forwards with explicit recipients and attachments
+- Prepare messages, natural replies/reply-all, and quoted or attached forwards with fully reviewed recipients and attachments
 - Send a reviewed immutable message through a durable, one-time dispatch claim
 
 Read access is the default. Mailbox writes, sending, and permanent deletion have separate deployment gates. Tokens also need the applicable scopes. Some operations require provider capabilities; unsupported operations fail rather than falling back to a mailbox-wide destructive command.

@@ -38,7 +38,7 @@ func TestActualToolRegistryAndAnnotations(t *testing.T) {
 		"mail_create":             {"mail.write", false, false, false, []string{"copy", "draft", "folder"}},
 		"mail_modify":             {"mail.write", false, true, false, []string{"flags", "move", "rename", "trash"}},
 		"mail_delete_permanently": {"mail.write", false, true, false, nil},
-		"mail_prepare":            {"mail.send", false, false, false, []string{"forward", "new", "reply"}},
+		"mail_prepare":            {"mail.send", false, false, false, []string{"forward", "new", "reply", "reply_all"}},
 		"mail_send_confirmed":     {"mail.send", false, true, true, nil},
 	}
 	if len(listed) != len(expected) {

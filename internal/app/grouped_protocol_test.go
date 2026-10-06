@@ -303,6 +303,7 @@ func groupedOperations() []groupedOperation {
 		{"delete", "mail_delete_permanently", ref, "mail.write", []string{"delete"}, 0},
 		{"new", "mail_prepare", `{"action":"new","message":` + msg + `}`, "mail.send", nil, 1},
 		{"reply", "mail_prepare", `{"action":"reply","reference":` + ref + `,"message":` + msg + `}`, "mail.send", []string{"read"}, 1},
+		{"reply_all", "mail_prepare", `{"action":"reply_all","reference":` + ref + `,"message":` + msg + `}`, "mail.send", []string{"read"}, 1},
 		{"forward", "mail_prepare", `{"action":"forward","reference":` + ref + `,"message":` + msg + `}`, "mail.send", []string{"read"}, 1},
 		{"send", "mail_send_confirmed", "", "mail.send", []string{"send"}, 0},
 	}
@@ -364,7 +365,7 @@ func TestGroupedProtocolRoutesAllOperations(t *testing.T) {
 				if backend.name != "Draft Mail" || !bytes.Contains(backend.draft, []byte("Bcc: <hidden@example.com>")) {
 					t.Fatalf("draft destination/BCC changed: folder=%q", backend.name)
 				}
-			case "new", "reply", "forward":
+			case "new", "reply", "reply_all", "forward":
 				p := store.record.Message
 				if len(p.Bcc) != 1 || !strings.Contains(p.Bcc[0], "hidden@example.com") || len(p.Attachments) != 1 || p.Attachments[0].SHA256 == "" {
 					t.Fatalf("incomplete prepared message: %#v", p)
@@ -478,7 +479,7 @@ func TestGroupedProtocolRequiresEveryActionField(t *testing.T) {
 		"folder": {"name"}, "copy": {"reference", "destination"}, "draft": {"message"},
 		"flags": {"reference", "operation", "flags"}, "rename": {"old", "new"},
 		"move": {"reference", "destination"}, "trash": {"reference"},
-		"new": {"message"}, "reply": {"reference", "message"}, "forward": {"reference", "message"},
+		"new": {"message"}, "reply": {"reference", "message"}, "reply_all": {"reference", "message"}, "forward": {"reference", "message"},
 	}
 	for _, op := range groupedOperations() {
 		for _, key := range required[op.name] {

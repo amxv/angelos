@@ -104,7 +104,7 @@ func readRESP(r *bufio.Reader) (any, error) {
 }
 func TestRedisAtomicClaimAndRetention(t *testing.T) {
 	r := redisFixture(t)
-	p, e := compose.Build("sender@example.com", compose.Input{To: []string{"to@example.com"}, Bcc: []string{"private@example.com"}, Text: "CONFIDENTIAL_FIXTURE"}, "00000000000000000000000000000001", time.Now())
+	p, e := compose.Build("sender@example.com", compose.Input{To: []string{"to@example.com"}, Bcc: []string{"private@example.com"}, Text: "CONFIDENTIAL_FIXTURE", HTML: "<p>CONFIDENTIAL_HTML_FIXTURE</p>"}, "00000000000000000000000000000001", time.Now())
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -128,7 +128,7 @@ func TestRedisAtomicClaimAndRetention(t *testing.T) {
 			}
 			if ok {
 				claims.Add(1)
-				if string(rec.Message.Raw) != string(p.Raw) {
+				if string(rec.Message.Raw) != string(p.Raw) || rec.Message.HTML != p.HTML {
 					t.Error("original payload lost before dispatch")
 				}
 			}
@@ -143,7 +143,7 @@ func TestRedisAtomicClaimAndRetention(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, secret := range []string{"CONFIDENTIAL_FIXTURE", "private@example.com", "to@example.com", "raw", "recipients"} {
+	for _, secret := range []string{"CONFIDENTIAL_FIXTURE", "CONFIDENTIAL_HTML_FIXTURE", "private@example.com", "to@example.com", "raw", "html", "recipients"} {
 		if strings.Contains(string(raw), secret) {
 			t.Fatalf("consumed payload retained %q", secret)
 		}

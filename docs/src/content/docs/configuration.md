@@ -20,6 +20,7 @@ The process reads environment variables. A `.env` file is not loaded automatical
 | `MAIL_USERNAME` | Required | Mailbox login, normally the full email address |
 | `MAIL_PASSWORD` | Required | Mailbox password or provider-supported app password |
 | `MAIL_FROM` | `MAIL_USERNAME` | Bare sender address accepted by the provider |
+| `MAIL_ALIASES` | Empty | Comma-separated own addresses excluded from derived reply/reply-all recipients; maximum 50 |
 | `IMAP_HOST` | Provider preset | IMAP DNS hostname |
 | `IMAP_PORT` | `993` | Implicit-TLS IMAP port |
 | `SMTP_HOST` | Provider preset | SMTP DNS hostname |
@@ -41,6 +42,10 @@ These are the settings published in [Spacemail's official client setup guide](ht
 Use `MAIL_PROVIDER=custom`, then set `IMAP_HOST` and `SMTP_HOST` to the provider's documented endpoints. For STARTTLS submission, set `SMTP_PORT=587` and `SMTP_TLS_MODE=starttls`.
 
 The current mail login uses a username/password. A provider that requires OAuth for IMAP or SMTP needs a separate mail-authentication implementation. OAuth on the MCP endpoint authenticates the agent client; it does not replace the mailbox's own login.
+
+## Reply identities
+
+`MAIL_FROM`, an address-valued `MAIL_USERNAME`, and configured `MAIL_ALIASES` identify the owner when deriving reply recipients. Comparisons are case-insensitive. Add aliases explicitly; Angelos does not guess plus-addresses or provider identities. Aliases do not authorize sending from another address: the visible sender and SMTP envelope remain `MAIL_FROM`. Explicit recipient overrides are preserved and remain part of the full preparation preview.
 
 ## MCP access
 

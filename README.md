@@ -6,10 +6,10 @@ The repository is private while under active development and is intended to be o
 
 ## Capabilities
 
-- Six risk-separated MCP tools cover 17 operations with compact schemas and optional full-detail read/search results
+- Six risk-separated MCP tools cover 18 operations with compact schemas and optional full-detail read/search results
 - Inspect provider capabilities, discover folders, search, and read mail without marking it read
 - Opt into flag changes, folder creation/rename, copying, moving, Trash, and saved drafts
-- Prepare messages, replies, and forwards with explicit To/CC/BCC and bounded attachments
+- Prepare messages, natural replies/reply-all, and quoted or attached forwards with reviewed To/CC/BCC, text/HTML, and bounded attachments
 - Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
 - Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
 

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type Endpoint struct {
@@ -21,6 +22,7 @@ type Config struct {
 	Username string `json:"-"`
 	Password string `json:"-"`
 	From     string
+	Aliases  []string `json:"-"`
 	IMAP     Endpoint
 	SMTP     Endpoint
 	Timeout  time.Duration
@@ -29,6 +31,14 @@ type Config struct {
 func LoadFromEnv() (Config, error) { return Load(os.Getenv) }
 func Load(getenv func(string) string) (Config, error) {
 	c := Config{Username: getenv("MAIL_USERNAME"), Password: getenv("MAIL_PASSWORD"), From: getenv("MAIL_FROM"), Timeout: 30 * time.Second}
+	if value := getenv("MAIL_ALIASES"); value != "" {
+		if len(value) > 16<<10 || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+			return c, errors.New("invalid MAIL_ALIASES")
+		}
+		for _, alias := range strings.Split(value, ",") {
+			c.Aliases = append(c.Aliases, strings.TrimSpace(alias))
+		}
+	}
 	preset := getenv("MAIL_PROVIDER")
 	if preset == "" || preset == "spacemail" {
 		c.IMAP = Endpoint{"mail.spacemail.com", 993, "tls"}
@@ -94,6 +104,16 @@ func (c Config) Validate() error {
 	if e != nil || a.Address != c.From || strings.ContainsAny(c.From, "\r\n") {
 		return errors.New("MAIL_FROM must be a bare email address")
 	}
+	if len(c.Aliases) > 50 {
+		return errors.New("MAIL_ALIASES supports at most 50 addresses")
+	}
+	seen := make(map[string]bool)
+	for _, alias := range c.Aliases {
+		if !bareAddress(alias) || seen[strings.ToLower(alias)] {
+			return errors.New("MAIL_ALIASES requires unique bare email addresses")
+		}
+		seen[strings.ToLower(alias)] = true
+	}
 	if c.Timeout < time.Second || c.Timeout > 2*time.Minute {
 		return errors.New("MAIL_TIMEOUT must be between 1s and 2m")
 	}
@@ -128,4 +148,27 @@ func (c Config) Validate() error {
 		return errors.New("SMTP port 465 requires implicit TLS")
 	}
 	return nil
+}
+
+// SelfAddresses only controls exclusion from derived reply recipients. It never
+// changes the configured sender, credentials or SMTP authority.
+func (c Config) SelfAddresses() []string {
+	out := []string{c.From}
+	if bareAddress(c.Username) {
+		out = append(out, c.Username)
+	}
+	return append(out, c.Aliases...)
+}
+
+func bareAddress(value string) bool {
+	if len(value) == 0 || len(value) > 254 {
+		return false
+	}
+	for _, r := range value {
+		if r <= 32 || r >= 127 {
+			return false
+		}
+	}
+	a, err := mail.ParseAddress(value)
+	return err == nil && a.Address == value && strings.Contains(value, "@")
 }

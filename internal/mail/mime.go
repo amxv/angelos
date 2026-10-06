@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"mime"
 	"strings"
 
 	"github.com/emersion/go-message"
@@ -187,6 +188,13 @@ func parseMessageAttachment(raw []byte, out *Message, target int) ([]byte, error
 		// omit it from the inventory and leak its children into inline forwards.
 		if strings.EqualFold(disp, "attachment") || filename != "" || (!isMultipart && !strings.HasPrefix(ct, "text/") && ct != "") {
 			index := len(out.Attachments) + 1
+			// Keep interpretive parameters with byte-exact downloads: losing a
+			// text charset or multipart boundary breaks an explicit forward.
+			contentType := mime.FormatMediaType(ct, params)
+			if contentType == "" || len(contentType) > 4096 {
+				incomplete(ErrLimit)
+				return
+			}
 			decoded, err := attachmentBody(h, body)
 			var n int64
 			if err == nil {
@@ -208,7 +216,7 @@ func parseMessageAttachment(raw []byte, out *Message, target int) ([]byte, error
 					attachmentData = nil
 				}
 			}
-			out.Attachments = append(out.Attachments, Attachment{Index: index, Filename: cleanHeader(filename, 1024), ContentType: cleanHeader(ct, 256), Size: n})
+			out.Attachments = append(out.Attachments, Attachment{Index: index, Filename: cleanHeader(filename, 1024), ContentType: contentType, Size: n})
 			return
 		}
 		if isMultipart {

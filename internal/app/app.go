@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/amxv/angelos/internal/auth"
@@ -21,7 +20,7 @@ import (
 )
 
 // Version identifies the public MCP interface and HTTP service build.
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 type Submitter interface {
 	Send(context.Context, mail.Envelope, []byte) (mail.SendResult, error)
@@ -97,10 +96,6 @@ func (a *App) Server() *mcp.Server {
 	return s
 }
 
-type replyInput struct {
-	Reference mail.Reference `json:"reference"`
-	Message   compose.Input  `json:"message"`
-}
 type sendInput struct {
 	PreparedID      string `json:"prepared_id"`
 	ConfirmedDigest string `json:"confirmed_digest"`
@@ -122,57 +117,7 @@ func (a *App) composeDraft(in compose.Input) (compose.Prepared, error) {
 	return compose.BuildDraft(a.Config.From, in, hex.EncodeToString(b), time.Now())
 }
 func preview(p compose.Prepared) result {
-	return result{"prepared_id": p.ID, "digest": p.Digest, "from": p.From, "to": p.To, "cc": p.Cc, "bcc": p.Bcc, "subject": p.Subject, "text": p.Text, "attachments": p.Attachments, "message_id": p.MessageID, "expires_at": p.ExpiresAt, "encoded_bytes": len(p.Raw), "status": "prepared", "confirmation": "Review this exact message with the user before mail_send_confirmed. Changed content needs a new preparation."}
-}
-func header(headers map[string]string, name string) string {
-	for k, v := range headers {
-		if strings.EqualFold(k, name) {
-			return v
-		}
-	}
-	return ""
-}
-func (a *App) prepareReply(ctx context.Context, in replyInput, forward bool) (any, error) {
-	source, e := a.Mail.Read(ctx, in.Reference)
-	if e != nil {
-		return nil, e
-	}
-	if source.Truncated {
-		return nil, errors.New("source message is truncated; prepare manually to avoid an incomplete reply or forward")
-	}
-	if forward {
-		if in.Message.Subject == "" {
-			in.Message.Subject = "Fwd: " + source.Subject
-		}
-		in.Message.Text += "\n\n---------- Forwarded message ----------\nSubject: " + source.Subject + "\n\n" + source.Text
-		in.Message.InReplyTo = ""
-		in.Message.References = nil
-	} else {
-		mid := header(source.Headers, "Message-ID")
-		if mid == "" {
-			return nil, errors.New("source has no Message-ID; prepare a standalone message instead")
-		}
-		in.Message.InReplyTo = mid
-		refs := strings.Fields(header(source.Headers, "References"))
-		if len(refs) > 28 {
-			refs = refs[len(refs)-28:]
-		}
-		in.Message.References = append(refs, mid)
-		if in.Message.Subject == "" {
-			in.Message.Subject = source.Subject
-			if !strings.HasPrefix(strings.ToLower(in.Message.Subject), "re:") {
-				in.Message.Subject = "Re: " + in.Message.Subject
-			}
-		}
-	}
-	p, e := a.compose(in.Message)
-	if e != nil {
-		return nil, e
-	}
-	if e = a.Store.Put(ctx, p); e != nil {
-		return nil, e
-	}
-	return preview(p), nil
+	return result{"prepared_id": p.ID, "digest": p.Digest, "from": p.From, "to": p.To, "cc": p.Cc, "bcc": p.Bcc, "subject": p.Subject, "text": p.Text, "html": p.HTML, "warnings": p.Warnings, "attachments": p.Attachments, "message_id": p.MessageID, "expires_at": p.ExpiresAt, "encoded_bytes": len(p.Raw), "status": "prepared", "confirmation": "Review this exact message with the user before mail_send_confirmed. Changed content needs a new preparation."}
 }
 func (a *App) send(ctx context.Context, in sendInput) (any, error) {
 	rec, claimed, e := a.Store.Claim(ctx, in.PreparedID, in.ConfirmedDigest, time.Now())

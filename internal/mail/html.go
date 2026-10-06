@@ -57,7 +57,10 @@ func htmlText(r io.Reader) (string, bool) {
 					return finish(true)
 				}
 			}
-			if kind == html.StartTagToken && !htmlVoidTag(tag) {
+			// In HTML, a self-closing slash does not close non-void elements
+			// such as script/style/iframe. Keep their contents hidden. SVG and
+			// MathML switch namespaces and do honor self-closing syntax.
+			if !htmlVoidTag(tag) && (kind == html.StartTagToken || (tag != "svg" && tag != "math")) {
 				if len(stack) >= 128 {
 					return finish(true)
 				}
