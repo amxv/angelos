@@ -127,3 +127,13 @@ func TestModSeqInputRemainsExactThroughSDK(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitEmptySearchOrderRetainsDefault(t *testing.T) {
+	f := newGroupedAuthFixture(t)
+	a, b, _ := newGroupedApp()
+	status, out := f.call(t, a, "mail.read", "mail_query", `{"action":"search","search":{"order":""}}`)
+	groupedResult(t, status, out)
+	if b.search.Order != "" {
+		t.Fatal("default order changed")
+	}
+}

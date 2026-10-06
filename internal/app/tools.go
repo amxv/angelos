@@ -114,7 +114,7 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 	// Relax only discovery requirements so callers can use existing backend defaults.
 	if p := schema.Properties["search"]; p != nil {
 		p.Required = nil
-		p.Properties["order"].Enum = []any{"newest", "oldest"}
+		p.Properties["order"].Enum = []any{"", "newest", "oldest"}
 		p.Properties["order"].Description = "UID arrival order; newest is default"
 	}
 	t.InputSchema = schema

@@ -51,9 +51,9 @@ The baseline is the actual `tools/list` tools array from commit `21269903054ca3e
 | Measurement | Before | After | Reduction |
 | --- | ---: | ---: | ---: |
 | Registered tools | 17 | 6 | 64.7% |
-| Complete tool-definition JSON bytes | 14,886 | 8,767 | 41.1% |
-| Input schemas alone, JSON bytes | 7,695 | 5,487 | 28.7% |
-| Approximate discovery tokens, ceil(bytes / 4) | 3,722 | 2,192 | 41.1% |
+| Complete tool-definition JSON bytes | 14,886 | 8,770 | 41.1% |
+| Input schemas alone, JSON bytes | 7,695 | 5,490 | 28.7% |
+| Approximate discovery tokens, ceil(bytes / 4) | 3,722 | 2,193 | 41.1% |
 | Representative 25-message search payload bytes | 7,567 | 6,159 | 18.6% |
 | Representative 18KB-text read payload bytes | 18,501 | 4,685 | 74.7% |
 
