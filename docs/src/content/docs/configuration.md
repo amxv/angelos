@@ -32,7 +32,7 @@ IMAP uses implicit TLS only. SMTP port 465 requires implicit TLS; port 587 requi
 
 ### Spacemail
 
-The preset uses `mail.spacemail.com:993` for IMAP and `mail.spacemail.com:465` for SMTP, both with implicit TLS. Set your complete mailbox address and its password. Confirm that IMAP/SMTP access is enabled in your provider account.
+The preset uses `mail.spacemail.com:993` for IMAP and `mail.spacemail.com:465` for SMTP, both with implicit TLS. Set your complete mailbox address and its primary mailbox password. Angelos does not require or configure a separate app-password flow. Confirm that IMAP/SMTP access is enabled in your provider account.
 
 These are the settings published in [Spacemail's official client setup guide](https://www.spaceship.com/knowledgebase/set-up-spacemail-outlook-imap-pop3/). The preset configures endpoints; it does not create an account or discover credentials.
 
