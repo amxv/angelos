@@ -25,7 +25,13 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
 Review formatting, `go.mod`, and `go.sum` changes before committing. CI rejects uncommitted formatting or module-manifest changes, runs race tests, vet and build, and checks reachable known Go vulnerabilities. Review the logs for the exact commit under test.
 
-Tests use local fixtures, fake transports, and injected dependencies where appropriate. CI also starts an ephemeral Redis container to test the actual atomic claim scripts and payload retention; these integration tests skip locally unless `ANGELOS_TEST_REDIS_ADDR` names a loopback fixture. Unit-test success does not establish that a real provider, OAuth tenant, Redis service, or deployed MCP connection is configured correctly.
+Tests use local fixtures, fake transports, and injected dependencies where appropriate. CI also starts an ephemeral Redis container to test the actual atomic claim scripts and payload retention; these integration tests skip locally unless `ANGELOS_TEST_REDIS_ADDR` names a loopback fixture. MIME regressions cover byte-exact non-UTF-8 text attachments, unsupported and malformed transfer encodings, attached multipart isolation, and bounded parsing using synthetic messages. Unit-test success does not establish that a real provider, OAuth tenant, Redis service, or deployed MCP connection is configured correctly.
+
+For an additional bounded MIME fuzz pass (seed cases also run in ordinary tests):
+
+```bash
+go test ./internal/mail -run '^$' -fuzz FuzzParseMessageAttachment -fuzztime=30s -parallel=2
+```
 
 ## Documentation checks
 
