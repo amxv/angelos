@@ -1,0 +1,39 @@
+name: CI
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - run: go mod tidy
+      - run: gofmt -w . && git diff -- . > formatting.patch
+      - run: go test -race -cover ./...
+      - run: go vet ./...
+      - run: go build ./...
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-module-manifest
+          path: |
+            go.mod
+            go.sum
+            formatting.patch
+  docs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.11'
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run build

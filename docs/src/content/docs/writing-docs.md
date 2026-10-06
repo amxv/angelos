@@ -2,7 +2,7 @@
 title: Writing docs
 description: Run the docs site locally and add documentation alongside Angelos changes.
 summary: The contributor workflow for keeping Angelos documentation close to the code.
-order: 3
+order: 100
 category: Contributing
 ---
 

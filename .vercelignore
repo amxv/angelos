@@ -1,8 +1,9 @@
-.vercel
+.git
+.github
+docs
 .env
 .env.*
-!.env.example
+*.log
 /server
 /coverage.out
 /tools
-*.log

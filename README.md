@@ -1,15 +1,52 @@
 # Angelos
 
-Angelos is an agent-native email project for giving agents a deliberate interface to send, receive, and operate on email.
+An agent-native email interface in Go. Angelos exposes a single existing IMAP/SMTP mailbox through a private, OAuth-protected remote MCP server. Your other mail clients can keep using the same account.
 
-The project is currently private while it is under active development and is intended to be open sourced later.
+The repository is under active development. Optional mailbox writes, permanent deletion, and SMTP sending are disabled by default.
+
+## Capabilities
+
+- Inspect provider capabilities, discover folders, search, and read mail without marking it read
+- Opt into flag changes, folder creation/rename, copying, moving, Trash, and saved drafts
+- Prepare messages, replies, and forwards with explicit To/CC/BCC and bounded attachments
+- Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
+- Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
+
+Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
+
+## Run and test
+
+Use the toolchain declared in [`go.mod`](./go.mod). Configure the required mailbox and OAuth environment variables from [Configuration](./docs/src/content/docs/configuration.md) and [Authentication](./docs/src/content/docs/authentication.md), then:
+
+```bash
+go mod download
+go test -race -cover ./...
+go vet ./...
+go run .
+```
+
+Environment variables must be exported or injected by your runtime; the Go process does not automatically load `.env`. Never commit real credentials. The public server requires OAuth configuration even during development.
+
+## Deploy
+
+The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a separate Astro/ZueDocs project published at <https://angelos.ashray.xyz>. Keep their project roots and environment variables separate. See [Deploy the API](./docs/src/content/docs/deployment.md).
+
+## Safety boundaries
+
+The MCP host is trusted to obtain the owner's approval. Payload digests bind content; they do not prove a human approved it. Sending additionally requires a durable Redis REST store. SMTP acceptance is not delivery, and uncertain outcomes must not be retried automatically. Read [Safety and concurrency](./docs/src/content/docs/safety.md) before enabling writes or sends.
 
 ## Documentation
 
-The documentation site lives in [`docs/`](./docs) and is published at <https://angelos.ashray.xyz>.
-
 ```bash
 cd docs
-bun install
+bun install --frozen-lockfile
+bun run check
+bun run build
 bun run dev
 ```
+
+Run `check` before `build`. See [Writing docs](./docs/src/content/docs/writing-docs.md) for contribution guidance.
+
+## License
+
+[Apache License 2.0](./LICENSE).

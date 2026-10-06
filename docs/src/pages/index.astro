@@ -17,8 +17,8 @@ const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.
       <p class="section-label">Agent-native email</p>
       <h1>Give agents a clean interface to work with email.</h1>
       <p class="hero__lede">
-        Angelos is being built as an email layer for agents: a place to document the contracts,
-        workflows, permissions, and operational behavior that let agents send, receive, and act on email.
+        Connect an existing mailbox to a private Go MCP server. Read and organize mail,
+        prepare reviewed messages, and keep your other mail clients connected.
       </p>
       <div class="hero__actions">
         <a class="button button--solid" href="/docs/overview">Read the overview</a>
@@ -26,16 +26,16 @@ const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.
       </div>
     </div>
     <aside class="hero__panel">
-      <p class="hero__panel-label">Docs from day one</p>
+      <p class="hero__panel-label">Deliberate access</p>
       <ul class="hero__signal-list">
-        <li>Document behavior next to the code that implements it.</li>
-        <li>Keep architecture and security contracts explicit as they emerge.</li>
-        <li>Publish documentation automatically from the main branch.</li>
+        <li>OAuth-protected access to one configured mailbox.</li>
+        <li>Separate opt-ins for mailbox writes and sending.</li>
+        <li>Exact prepared payloads and durable dispatch records.</li>
       </ul>
       <div class="hero__terminal">
-        <span>$ cd docs</span>
-        <span>$ bun run dev</span>
-        <span>$ bun run check</span>
+        <span>$ go test ./...</span>
+        <span>$ go run .</span>
+        <span>Read access first. Enable changes deliberately.</span>
       </div>
     </aside>
   </section>
@@ -43,10 +43,10 @@ const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.
   <section class="shell docs-teaser">
     <div class="section-heading">
       <p class="section-label">Documentation</p>
-      <h2>A living map of Angelos as the implementation takes shape.</h2>
+      <h2>Set up a mailbox. Understand every boundary.</h2>
       <p>
-        The initial pages establish the documentation structure without locking in product details
-        that have not been implemented yet.
+        Start with the safety model, configure Spacemail or explicit provider settings,
+        and connect through an existing OAuth issuer.
       </p>
     </div>
     <div class="docs-teaser__grid">
