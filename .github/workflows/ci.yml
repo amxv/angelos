@@ -18,20 +18,12 @@ jobs:
         with:
           go-version: '1.27.1'
           cache: false
-      - run: go mod tidy
-      - run: gofmt -w . && git diff -- . > formatting.patch
+      - run: go mod tidy && git diff --exit-code -- go.mod go.sum
+      - run: test -z "$(gofmt -l .)"
       - run: go test -race -cover ./...
       - run: go vet ./...
       - run: go build ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: go-module-manifest
-          path: |
-            go.mod
-            go.sum
-            formatting.patch
   docs:
     runs-on: ubuntu-latest
     defaults:

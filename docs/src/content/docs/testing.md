@@ -23,7 +23,7 @@ go build ./...
 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 ```
 
-Review formatting, `go.mod`, and `go.sum` changes before committing. The CI workflow runs Go checks and uploads its module manifests for inspection; review the logs and artifacts for the exact commit under test.
+Review formatting, `go.mod`, and `go.sum` changes before committing. CI rejects uncommitted formatting or module-manifest changes, runs race tests, vet and build, and checks reachable known Go vulnerabilities. Review the logs for the exact commit under test.
 
 Tests use local fixtures, fake transports, and injected dependencies where appropriate. CI also starts an ephemeral Redis container to test the actual atomic claim scripts and payload retention; these integration tests skip locally unless `ANGELOS_TEST_REDIS_ADDR` names a loopback fixture. Unit-test success does not establish that a real provider, OAuth tenant, Redis service, or deployed MCP connection is configured correctly.
 
