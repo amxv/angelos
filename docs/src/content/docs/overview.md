@@ -10,6 +10,8 @@ category: Start
 
 Angelos gives an agent a scoped interface to one existing IMAP/SMTP mailbox. It runs as an OAuth-protected remote MCP server written in Go. Apple Mail and other IMAP clients can remain connected to the same account.
 
+Version 0.5.0 groups 19 operations into six MCP tools and adds Gmail/Workspace support through server-side XOAUTH2. See [Migration and token budget](/docs/tool-migration) for the client contract and [Gmail and Google Workspace](/docs/gmail-workspace) for provider setup and limits.
+
 ## What it supports
 
 - Discover provider capabilities and folders, search mail, and read plain-text content without marking messages read
