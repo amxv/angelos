@@ -16,16 +16,16 @@ import (
 func newPublicClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
-		Proxy: nil, // An environment proxy must not bypass destination validation.
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-		TLSHandshakeTimeout: 3 * time.Second,
-		ResponseHeaderTimeout: 3 * time.Second,
-		IdleConnTimeout: time.Minute,
-		MaxIdleConns: 2,
-		MaxIdleConnsPerHost: 2,
-		MaxConnsPerHost: 2,
+		Proxy:                  nil, // An environment proxy must not bypass destination validation.
+		TLSClientConfig:        &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSHandshakeTimeout:    3 * time.Second,
+		ResponseHeaderTimeout:  3 * time.Second,
+		IdleConnTimeout:        time.Minute,
+		MaxIdleConns:           2,
+		MaxIdleConnsPerHost:    2,
+		MaxConnsPerHost:        2,
 		MaxResponseHeaderBytes: 16 * 1024,
-		ForceAttemptHTTP2: true,
+		ForceAttemptHTTP2:      true,
 	}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)

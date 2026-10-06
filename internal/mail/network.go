@@ -75,7 +75,7 @@ func (b *Backend) openConn(ctx context.Context,ep config.Endpoint)(net.Conn,func
 }
 func (b *Backend) tlsConfig(host string)*tls.Config {return &tls.Config{ServerName:host,MinVersion:tls.VersionTLS12,RootCAs:b.roots}}
 
-type imapSession struct {client *imapclient.Client; cleanup func(); modified *modifiedResponseTracker}
+type imapSession struct {client *imapclient.Client; cleanup func(); modified *modifiedResponseTracker; modseq bool}
 func (s *imapSession) close(){s.client.Close();s.cleanup()}
 func (b *Backend) connectIMAP(ctx context.Context)(*imapSession,error) {
  conn,done,err:=b.openConn(ctx,b.config.IMAP);if err!=nil{return nil,err}
@@ -93,6 +93,7 @@ func (s *imapSession) selectMailbox(folder string, uidValidity uint32)(*imap.Sel
  if err!=nil{return nil,ErrUnavailable}
  if data.UIDValidity==0 || data.UIDNext==0 {return nil,ErrUnavailable}
  if uidValidity!=0&&data.UIDValidity!=uidValidity{return nil,ErrStaleReference}
+ s.modseq=data.HighestModSeq!=0
  return data,nil
 }
 // Do not leak provider response text, mailbox contents, or credentials in errors.

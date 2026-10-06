@@ -40,16 +40,24 @@ func TestStatelessSDKPreservesPrincipalAndScopes(t *testing.T) {
 	post := func(token, message string) (int, []byte, http.Header) {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint.URL, strings.NewReader(message))
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json, text/event-stream")
 		req.Header.Set("MCP-Protocol-Version", "2025-11-25")
-		if token != "" { req.Header.Set("Authorization", "Bearer "+token) }
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 		resp, err := client.Do(req)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 64 * 1024))
-		if err != nil { t.Fatal(err) }
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		if err != nil {
+			t.Fatal(err)
+		}
 		return resp.StatusCode, body, resp.Header
 	}
 	full := rsaToken(t, f.key, tokenHeader(), f.claims())
@@ -69,13 +77,15 @@ func TestStatelessSDKPreservesPrincipalAndScopes(t *testing.T) {
 	toolCall := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"check_send_scope","arguments":{}}}`
 	status, body, _ := post(full, toolCall)
 	var response struct {
-		Error json.RawMessage `json:"error"`
+		Error  json.RawMessage `json:"error"`
 		Result struct {
-			IsError bool `json:"isError"`
-			Output map[string]any `json:"structuredContent"`
+			IsError bool           `json:"isError"`
+			Output  map[string]any `json:"structuredContent"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(body, &response); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
 	if status != 200 || len(response.Error) != 0 || response.Result.IsError || response.Result.Output["subject"] != "owner-123" || response.Result.Output["send"] != true || authorizedCalls.Load() != 1 {
 		t.Fatalf("authorized SDK tool lost identity/scope: %d %s calls=%d", status, body, authorizedCalls.Load())
 	}

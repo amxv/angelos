@@ -68,11 +68,14 @@ func ascii(s string) bool {for _,r:=range s {if r>127{return false}};return true
 func validMessageID(s string) bool { return len(s)<=998 && len(s)>4 && strings.HasPrefix(s,"<") && strings.HasSuffix(s,">") && !strings.ContainsAny(s,"\r\n\x00 \t") && strings.Count(s,"<")==1 && strings.Count(s,">")==1 && strings.Contains(s,"@") }
 
 // Build fixes Date, Message-ID, MIME boundaries, recipients and bytes before approval.
-func Build(from string, in Input, id string, now time.Time) (Prepared,error) {
+func Build(from string,in Input,id string,now time.Time)(Prepared,error){return build(from,in,id,now,false)}
+// BuildDraft permits recipientless drafts while preserving all MIME safety checks.
+func BuildDraft(from string,in Input,id string,now time.Time)(Prepared,error){return build(from,in,id,now,true)}
+func build(from string, in Input, id string, now time.Time, draft bool) (Prepared,error) {
  var out Prepared
  if len(id)!=32 {return out,errors.New("invalid preparation id")}; if _,e:=hex.DecodeString(id);e!=nil{return out,errors.New("invalid preparation id")}
  fromHeader,fromEnvelope,e:=addresses([]string{from});if e!=nil{return out,errors.New("invalid configured sender")}
- if len(in.To)+len(in.Cc)+len(in.Bcc)==0 || len(in.To)+len(in.Cc)+len(in.Bcc)>MaxRecipients{return out,errors.New("recipient count must be 1 to 50")}
+ if (!draft && len(in.To)+len(in.Cc)+len(in.Bcc)==0) || len(in.To)+len(in.Cc)+len(in.Bcc)>MaxRecipients{return out,errors.New("recipient count must be 1 to 50")}
  if len(in.Subject)>512 || invalid(in.Subject) || len(in.Text)>1<<20 || strings.ContainsRune(in.Text,0){return out,errors.New("invalid or oversized subject or text")}
  if len(in.Attachments)>20{return out,errors.New("too many attachments")}
  to,te,e:=addresses(in.To);if e!=nil{return out,e};cc,ce,e:=addresses(in.Cc);if e!=nil{return out,e};bc,be,e:=addresses(in.Bcc);if e!=nil{return out,e}

@@ -119,7 +119,7 @@ func summaryFromBuffer(buf *imapclient.FetchMessageBuffer,folder string,validity
 }
 func addresses(in []imap.Address)[]Address {out:=make([]Address,0);for i,a:=range in {if i>=100{break};if addr:=a.Addr();addr!="" {out=append(out,Address{Name:cleanHeader(a.Name,1024),Address:cleanHeader(addr,1024)})}};return out}
 func fetchSummaries(s *imapSession,folder string,validity uint32,uids []imap.UID)([]Summary,error) {
- cmd:=s.client.Fetch(imap.UIDSetNum(uids...),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,ModSeq:s.client.Caps().Has(imap.CapCondStore)})
+ cmd:=s.client.Fetch(imap.UIDSetNum(uids...),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,ModSeq:s.modseq})
  out:=make([]Summary,0,len(uids))
  for data:=cmd.Next();data!=nil;data=cmd.Next(){
   if len(out)>=len(uids){s.cleanup();cmd.Close();return nil,ErrLimit}
@@ -135,7 +135,7 @@ func (b *Backend) Read(ctx context.Context,ref Reference)(Message,error) {
  s,err:=b.connectIMAP(ctx);if err!=nil{return out,err};defer s.close()
  if _,err:=s.selectMailbox(ref.Folder,ref.UIDValidity);err!=nil{return out,err}
  part:=&imap.FetchItemBodySection{Peek:true,Partial:&imap.SectionPartial{Offset:0,Size:maxMessageBytes+1}}
- cmd:=s.client.Fetch(imap.UIDSetNum(imap.UID(ref.UID)),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,ModSeq:s.client.Caps().Has(imap.CapCondStore),BodySection:[]*imap.FetchItemBodySection{part}})
+ cmd:=s.client.Fetch(imap.UIDSetNum(imap.UID(ref.UID)),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,ModSeq:s.modseq,BodySection:[]*imap.FetchItemBodySection{part}})
  found:=false;gotBody:=false;var raw []byte;buf:=&imapclient.FetchMessageBuffer{}
  for data:=cmd.Next();data!=nil;data=cmd.Next(){
   if found{s.cleanup();cmd.Close();return out,ErrLimit};found=true

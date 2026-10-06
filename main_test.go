@@ -1,4 +1,37 @@
 package main
-import("net/http";"net/http/httptest";"strings";"testing")
-func TestMissingConfigFailsClosed(t *testing.T){for _,v:=range []string{"MAIL_USERNAME","MAIL_PASSWORD","MCP_RESOURCE_URL","MCP_OAUTH_ISSUER","MCP_OAUTH_JWKS_URL","MCP_ALLOWED_SUBJECTS"}{t.Setenv(v,"")};h:=newHandler();r:=httptest.NewRecorder();h.ServeHTTP(r,httptest.NewRequest("POST","https://example.com/mcp",strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)));if r.Code!=http.StatusServiceUnavailable{t.Fatal(r.Code)};r=httptest.NewRecorder();h.ServeHTTP(r,httptest.NewRequest("GET","https://example.com/healthz",nil));if r.Code!=200||!strings.Contains(r.Body.String(),`"configured":false`){t.Fatal(r.Body.String())}}
-func TestEnableFlagsExact(t *testing.T){for _,v:=range []string{"","true","yes","0"}{t.Setenv("MAIL_ENABLE_SEND",v);if enabled("MAIL_ENABLE_SEND"){t.Fatal(v)}};t.Setenv("MAIL_ENABLE_SEND","1");if !enabled("MAIL_ENABLE_SEND"){t.Fatal("1 should enable")}}
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestMissingConfigFailsClosed(t *testing.T) {
+	for _, v := range []string{"MAIL_USERNAME", "MAIL_PASSWORD", "MCP_RESOURCE_URL", "MCP_OAUTH_ISSUER", "MCP_OAUTH_JWKS_URL", "MCP_ALLOWED_SUBJECTS"} {
+		t.Setenv(v, "")
+	}
+	h := newHandler()
+	r := httptest.NewRecorder()
+	h.ServeHTTP(r, httptest.NewRequest("POST", "https://example.com/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
+	if r.Code != http.StatusServiceUnavailable {
+		t.Fatal(r.Code)
+	}
+	r = httptest.NewRecorder()
+	h.ServeHTTP(r, httptest.NewRequest("GET", "https://example.com/healthz", nil))
+	if r.Code != 200 || !strings.Contains(r.Body.String(), `"configured":false`) {
+		t.Fatal(r.Body.String())
+	}
+}
+func TestEnableFlagsExact(t *testing.T) {
+	for _, v := range []string{"", "true", "yes", "0"} {
+		t.Setenv("MAIL_ENABLE_SEND", v)
+		if enabled("MAIL_ENABLE_SEND") {
+			t.Fatal(v)
+		}
+	}
+	t.Setenv("MAIL_ENABLE_SEND", "1")
+	if !enabled("MAIL_ENABLE_SEND") {
+		t.Fatal("1 should enable")
+	}
+}

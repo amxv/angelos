@@ -56,12 +56,12 @@ func jsonBytes(t *testing.T, value any) []byte {
 }
 
 type fixture struct {
-	a *Authenticator
-	now time.Time
-	body string
-	status int
+	a        *Authenticator
+	now      time.Time
+	body     string
+	status   int
 	requests atomic.Int32
-	key *rsa.PrivateKey
+	key      *rsa.PrivateKey
 }
 
 func testConfig() Config {
@@ -115,7 +115,9 @@ func rsaTokenRaw(t *testing.T, key *rsa.PrivateKey, header, claims []byte) strin
 	return payload + "." + rawBase64.EncodeToString(sig)
 }
 
-func tokenHeader() map[string]any { return map[string]any{"alg": "RS256", "kid": "key-1", "typ": "at+jwt"} }
+func tokenHeader() map[string]any {
+	return map[string]any{"alg": "RS256", "kid": "key-1", "typ": "at+jwt"}
+}
 
 func call(a *Authenticator, token string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, "https://mail.example.com/mcp", nil)
@@ -190,13 +192,17 @@ func TestValidES256(t *testing.T) {
 
 func TestClaimsValidation(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		change func(map[string]any, *fixture)
 		status int
 	}{
 		{"audience array", func(c map[string]any, f *fixture) { c["aud"] = []string{"other", f.a.config.ResourceURL} }, 204},
 		{"missing typ irrelevant to claims", func(c map[string]any, f *fixture) { delete(c, "iat"); delete(c, "nbf") }, 204},
-		{"case aliases do not override", func(c map[string]any, f *fixture) { c["ISS"] = "attacker"; c["AUD"] = "attacker"; c["SUB"] = "attacker" }, 204},
+		{"case aliases do not override", func(c map[string]any, f *fixture) {
+			c["ISS"] = "attacker"
+			c["AUD"] = "attacker"
+			c["SUB"] = "attacker"
+		}, 204},
 		{"wrong issuer", func(c map[string]any, f *fixture) { c["iss"] = "https://attacker.example.com/" }, 401},
 		{"issuer trailing slash exact", func(c map[string]any, f *fixture) { c["iss"] = strings.TrimSuffix(f.a.config.Issuer, "/") }, 401},
 		{"missing issuer", func(c map[string]any, f *fixture) { delete(c, "iss"); c["ISS"] = f.a.config.Issuer }, 401},
@@ -242,7 +248,10 @@ func TestClaimsValidation(t *testing.T) {
 }
 
 func TestHeaderAndSignatureValidation(t *testing.T) {
-	for _, test := range []struct { name string; change func(map[string]any) }{
+	for _, test := range []struct {
+		name   string
+		change func(map[string]any)
+	}{
 		{"none", func(h map[string]any) { h["alg"] = "none" }},
 		{"HS confusion", func(h map[string]any) { h["alg"] = "HS256" }},
 		{"unsupported RSA", func(h map[string]any) { h["alg"] = "RS512" }},
@@ -300,7 +309,11 @@ func TestDuplicateJSONIsRejected(t *testing.T) {
 func TestMiddlewareRejectsAlternateCredentials(t *testing.T) {
 	f := newFixture(t)
 	token := rsaToken(t, f.key, tokenHeader(), f.claims())
-	for _, test := range []struct { name, url string; headers []string; cookie string }{
+	for _, test := range []struct {
+		name, url string
+		headers   []string
+		cookie    string
+	}{
 		{name: "absent", url: "/mcp"},
 		{name: "query", url: "/mcp?access_token=" + token},
 		{name: "query plus header", url: "/mcp?access_token=x", headers: []string{"Bearer " + token}},
@@ -311,7 +324,9 @@ func TestMiddlewareRejectsAlternateCredentials(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, test.url, strings.NewReader("access_token="+token))
-			for _, h := range test.headers { r.Header.Add("Authorization", h) }
+			for _, h := range test.headers {
+				r.Header.Add("Authorization", h)
+			}
 			r.Header.Set("Cookie", test.cookie)
 			w := httptest.NewRecorder()
 			f.a.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unauthorized handler called") })).ServeHTTP(w, r)
@@ -332,12 +347,14 @@ func TestMetadataAndChallenge(t *testing.T) {
 	w := httptest.NewRecorder()
 	f.a.MetadataHandler().ServeHTTP(w, r)
 	var metadata struct {
-		Resource string `json:"resource"`
+		Resource             string   `json:"resource"`
 		AuthorizationServers []string `json:"authorization_servers"`
-		Scopes []string `json:"scopes_supported"`
-		Methods []string `json:"bearer_methods_supported"`
+		Scopes               []string `json:"scopes_supported"`
+		Methods              []string `json:"bearer_methods_supported"`
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &metadata); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(w.Body.Bytes(), &metadata); err != nil {
+		t.Fatal(err)
+	}
 	if w.Code != 200 || metadata.Resource != f.a.config.ResourceURL || len(metadata.AuthorizationServers) != 1 || metadata.AuthorizationServers[0] != f.a.config.Issuer || len(metadata.Scopes) != 3 || len(metadata.Methods) != 1 || metadata.Methods[0] != "header" {
 		t.Fatalf("wrong metadata: %#v", metadata)
 	}
@@ -346,41 +363,69 @@ func TestMetadataAndChallenge(t *testing.T) {
 	}
 	for _, scope := range []string{ScopeRead, ScopeWrite, ScopeSend} {
 		wanted := scope
-		if scope != ScopeRead { wanted = ScopeRead + " " + scope }
-		if !strings.Contains(f.a.Challenge(scope), `scope="`+wanted+`"`) { t.Fatal("challenge lost scope") }
+		if scope != ScopeRead {
+			wanted = ScopeRead + " " + scope
+		}
+		if !strings.Contains(f.a.Challenge(scope), `scope="`+wanted+`"`) {
+			t.Fatal("challenge lost scope")
+		}
 	}
 	for _, method := range []string{http.MethodHead, http.MethodPost} {
 		w := httptest.NewRecorder()
 		f.a.MetadataHandler().ServeHTTP(w, httptest.NewRequest(method, MetadataPath, nil))
-		if method == http.MethodHead && (w.Code != 200 || w.Body.Len() != 0) { t.Fatal("incorrect HEAD response") }
-		if method == http.MethodPost && (w.Code != 405 || w.Header().Get("Allow") != "GET, HEAD") { t.Fatal("incorrect method rejection") }
+		if method == http.MethodHead && (w.Code != 200 || w.Body.Len() != 0) {
+			t.Fatal("incorrect HEAD response")
+		}
+		if method == http.MethodPost && (w.Code != 405 || w.Header().Get("Allow") != "GET, HEAD") {
+			t.Fatal("incorrect method rejection")
+		}
 	}
-	if f.requests.Load() != 0 { t.Fatal("public metadata fetched signing keys") }
+	if f.requests.Load() != 0 {
+		t.Fatal("public metadata fetched signing keys")
+	}
 }
 
 func TestKeyCacheRotationAndThrottling(t *testing.T) {
 	f := newFixture(t)
 	token := rsaToken(t, f.key, tokenHeader(), f.claims())
 	for i := 0; i < 4; i++ {
-		if got := call(f.a, token).Code; got != 204 { t.Fatalf("valid cached token: %d", got) }
+		if got := call(f.a, token).Code; got != 204 {
+			t.Fatalf("valid cached token: %d", got)
+		}
 	}
 	header := tokenHeader()
 	header["kid"] = "rotated"
 	rotated := rsaToken(t, f.key, header, f.claims())
 	for i := 0; i < 8; i++ {
-		if got := call(f.a, rotated).Code; got != 401 { t.Fatalf("unknown kid accepted: %d", got) }
+		if got := call(f.a, rotated).Code; got != 401 {
+			t.Fatalf("unknown kid accepted: %d", got)
+		}
 	}
-	if f.requests.Load() != 1 { t.Fatalf("unknown kids caused %d fetches", f.requests.Load()) }
+	if f.requests.Load() != 1 {
+		t.Fatalf("unknown kids caused %d fetches", f.requests.Load())
+	}
 	f.now = f.now.Add(keyRefreshInterval)
 	f.body = string(jsonBytes(t, map[string]any{"keys": []any{publicRSA(f.key, "rotated")}}))
-	if got := call(f.a, rotated).Code; got != 204 { t.Fatalf("rotated key not loaded: %d", got) }
-	if got := call(f.a, token).Code; got != 401 { t.Fatalf("removed key still accepted: %d", got) }
-	if f.requests.Load() != 2 { t.Fatalf("rotation made %d fetches", f.requests.Load()) }
+	if got := call(f.a, rotated).Code; got != 204 {
+		t.Fatalf("rotated key not loaded: %d", got)
+	}
+	if got := call(f.a, token).Code; got != 401 {
+		t.Fatalf("removed key still accepted: %d", got)
+	}
+	if f.requests.Load() != 2 {
+		t.Fatalf("rotation made %d fetches", f.requests.Load())
+	}
 	f.now = f.now.Add(keyCacheTTL)
 	f.status = http.StatusServiceUnavailable
-	if got := call(f.a, rotated).Code; got != 401 { t.Fatalf("stale key accepted on error: %d", got) }
-	if got := call(f.a, rotated).Code; got != 401 { t.Fatalf("stale key accepted on retry: %d", got) }
-	if f.requests.Load() != 3 { t.Fatal("failed refresh was not throttled") }
+	if got := call(f.a, rotated).Code; got != 401 {
+		t.Fatalf("stale key accepted on error: %d", got)
+	}
+	if got := call(f.a, rotated).Code; got != 401 {
+		t.Fatalf("stale key accepted on retry: %d", got)
+	}
+	if f.requests.Load() != 3 {
+		t.Fatal("failed refresh was not throttled")
+	}
 }
 
 func TestConcurrentRequestsCoalesceJWKS(t *testing.T) {
@@ -391,11 +436,15 @@ func TestConcurrentRequestsCoalesceJWKS(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if got := call(f.a, token).Code; got != 204 { t.Errorf("concurrent request: %d", got) }
+			if got := call(f.a, token).Code; got != 204 {
+				t.Errorf("concurrent request: %d", got)
+			}
 		}()
 	}
 	wg.Wait()
-	if f.requests.Load() != 1 { t.Fatalf("concurrent requests made %d fetches", f.requests.Load()) }
+	if f.requests.Load() != 1 {
+		t.Fatalf("concurrent requests made %d fetches", f.requests.Load())
+	}
 }
 
 func TestExpirationRecheckedAfterFetch(t *testing.T) {
@@ -408,5 +457,7 @@ func TestExpirationRecheckedAfterFetch(t *testing.T) {
 		f.now = f.now.Add(2 * time.Second)
 		return original.RoundTrip(r)
 	})
-	if got := call(f.a, token).Code; got != 401 { t.Fatalf("token expired during fetch accepted: %d", got) }
+	if got := call(f.a, token).Code; got != 401 {
+		t.Fatalf("token expired during fetch accepted: %d", got)
+	}
 }

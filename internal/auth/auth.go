@@ -12,14 +12,14 @@ import (
 )
 
 var (
-	ErrInvalidToken = errors.New("invalid access token")
+	ErrInvalidToken      = errors.New("invalid access token")
 	ErrInsufficientScope = errors.New("insufficient OAuth scope")
 )
 
 // Principal contains verified identity and scopes, never the bearer token.
 type Principal struct {
 	Subject string
-	Scopes []string
+	Scopes  []string
 }
 
 type principalKey struct{}
@@ -55,14 +55,14 @@ func RequireScope(ctx context.Context, scope string) error {
 // Authenticator is safe for concurrent HTTP requests. Its only mutable state is
 // a bounded public signing-key cache; authenticated sessions are not retained.
 type Authenticator struct {
-	config Config
-	allowed map[string]struct{}
-	client *http.Client
+	config      Config
+	allowed     map[string]struct{}
+	client      *http.Client
 	metadataURL string
-	now func() time.Time
-	mu sync.Mutex
-	keys map[string]verificationKey
-	keysExpire time.Time
+	now         func() time.Time
+	mu          sync.Mutex
+	keys        map[string]verificationKey
+	keysExpire  time.Time
 	lastAttempt time.Time
 }
 
@@ -90,7 +90,7 @@ func New(c Config) (*Authenticator, error) {
 	return &Authenticator{
 		config: c, allowed: allowed, client: client,
 		metadataURL: resource.Scheme + "://" + resource.Host + MetadataPath,
-		now: time.Now,
+		now:         time.Now,
 	}, nil
 }
 
@@ -125,9 +125,9 @@ func (a *Authenticator) MetadataHandler() http.Handler {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(struct {
-			Resource string `json:"resource"`
-			AuthorizationServers []string `json:"authorization_servers"`
-			ScopesSupported []string `json:"scopes_supported"`
+			Resource               string   `json:"resource"`
+			AuthorizationServers   []string `json:"authorization_servers"`
+			ScopesSupported        []string `json:"scopes_supported"`
 			BearerMethodsSupported []string `json:"bearer_methods_supported"`
 		}{a.config.ResourceURL, []string{a.config.Issuer}, []string{ScopeRead, ScopeWrite, ScopeSend}, []string{"header"}})
 	})

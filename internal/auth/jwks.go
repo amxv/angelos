@@ -14,16 +14,16 @@ import (
 )
 
 const (
-	maxJWKSBytes = 256 * 1024
-	maxJWKSKeys = 32
-	keyCacheTTL = 5 * time.Minute
+	maxJWKSBytes       = 256 * 1024
+	maxJWKSKeys        = 32
+	keyCacheTTL        = 5 * time.Minute
 	keyRefreshInterval = time.Minute
 )
 
 type verificationKey struct {
 	algorithm string
-	rsa *rsa.PublicKey
-	ec *ecdsa.PublicKey
+	rsa       *rsa.PublicKey
+	ec        *ecdsa.PublicKey
 }
 
 func (a *Authenticator) signingKey(ctx context.Context, kid, alg string) (verificationKey, error) {

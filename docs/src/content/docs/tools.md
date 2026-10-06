@@ -120,7 +120,7 @@ Replies require explicit recipients, even when the original has Reply-To or From
 
 Preparation returns `prepared_id`, `digest`, full recipient arrays including BCC, subject, text, attachment hashes, Message-ID, byte size, and expiry. Review that exact content with the owner. Preparation expires after 15 minutes. Any change needs a new preparation and approval.
 
-After approval, pass the exact ID/digest pair to `mail_send_confirmed`. Set `append_sent` deliberately: `true` requests a separate IMAP Sent-folder copy after SMTP acceptance. A provider may already save sent mail; enabling the copy can create duplicates. Failure to save a Sent copy does not undo sending and is not a reason to resend.
+After approval, pass the exact ID/digest pair to `mail_send_confirmed`. Set `append_sent` deliberately: `true` requests a separate IMAP Sent-folder copy after SMTP acceptance and requires both `mail.write` and `MAIL_ENABLE_WRITES=1`; missing filing permission rejects the request before any send. A provider may already save sent mail; enabling the copy can create duplicates. Failure to save a Sent copy does not undo sending and is not a reason to resend.
 
 Repeated calls for a consumed ID return its recorded status without another SMTP attempt. `accepted` means SMTP acceptance only. Investigate `sending`, `unknown`, and persistence warnings before considering a new message. The host remains responsible for human confirmation; the digest is a content binding, not evidence of a human click.
 

@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	ScopeRead = "mail.read"
-	ScopeWrite = "mail.write"
-	ScopeSend = "mail.send"
-	MetadataPath = "/.well-known/oauth-protected-resource"
+	ScopeRead      = "mail.read"
+	ScopeWrite     = "mail.write"
+	ScopeSend      = "mail.send"
+	MetadataPath   = "/.well-known/oauth-protected-resource"
 	requestTimeout = 5 * time.Second
 )
 
@@ -27,9 +27,9 @@ const (
 // must be an HTTPS endpoint on the issuer's origin; discovery is never taken from
 // token headers. No static-bearer or development bypass is supported.
 type Config struct {
-	ResourceURL string
-	Issuer string
-	JWKSURL string
+	ResourceURL     string
+	Issuer          string
+	JWKSURL         string
 	AllowedSubjects []string
 	// HTTPClient is an optional trusted test transport. Leave nil in production
 	// to use the public-IP-only transport. Redirects and timeouts remain bounded.
@@ -40,8 +40,8 @@ type Config struct {
 func ConfigFromEnv() (Config, error) {
 	c := Config{
 		ResourceURL: os.Getenv("MCP_RESOURCE_URL"),
-		Issuer: os.Getenv("MCP_OAUTH_ISSUER"),
-		JWKSURL: os.Getenv("MCP_OAUTH_JWKS_URL"),
+		Issuer:      os.Getenv("MCP_OAUTH_ISSUER"),
+		JWKSURL:     os.Getenv("MCP_OAUTH_JWKS_URL"),
 	}
 	for _, subject := range strings.Split(os.Getenv("MCP_ALLOWED_SUBJECTS"), ",") {
 		if subject = strings.TrimSpace(subject); subject != "" {
@@ -56,8 +56,8 @@ func ConfigFromEnv() (Config, error) {
 
 func (c Config) validate() error {
 	for name, value := range map[string]string{
-		"MCP_RESOURCE_URL": c.ResourceURL,
-		"MCP_OAUTH_ISSUER": c.Issuer,
+		"MCP_RESOURCE_URL":   c.ResourceURL,
+		"MCP_OAUTH_ISSUER":   c.Issuer,
 		"MCP_OAUTH_JWKS_URL": c.JWKSURL,
 	} {
 		if _, err := publicHTTPSURL(value); err != nil {
