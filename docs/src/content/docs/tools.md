@@ -51,13 +51,13 @@ The numbers above are illustrative. A stale UIDVALIDITY or a missing message req
 }
 ```
 
-Results are newest UID first. This is mailbox arrival order, not a configurable subject/date sort. The default result limit is 25 and the maximum is 100. Each call scans at most 1000 UID values. Deleted UID gaps mean this is not necessarily 1000 messages.
+`order` accepts `newest` (the default) or `oldest`, sorted by UID. This is mailbox arrival order, not a subject or sent-date sort. The default result limit is 25 and the maximum is 100. Each call scans at most 1000 UID values. Deleted UID gaps mean this is not necessarily 1000 messages.
 
-Keep requesting with the returned `next_cursor` and the same filters until the cursor is absent. An empty result page may still have a cursor. Changing a filter requires starting a new search.
+Keep requesting with the returned `next_cursor`, the same filters, and the same order until the cursor is absent. An empty result page may still have a cursor. Pagination keeps the initial upper UID bound, so newly arriving messages require a new search. Changing a filter or order also requires starting a new search.
 
 ### Read limits
 
-Reads inspect up to a 5 MiB raw-message prefix and return at most 256 KiB of text. MIME parsing is bounded to 12 nested levels and 100 parts. HTML-only content can produce a warning without a text body. Truncation can make attachment metadata incomplete.
+Reads inspect up to a 5 MiB raw-message prefix and return at most 256 KiB of text. MIME parsing is bounded to 12 nested levels and 100 parts. Plain-text alternatives are preferred; HTML-only mail uses text extraction with a warning. Extraction reads at most 1 MiB of HTML, with a 64 KiB token limit, 20,000-token limit, and 128-level stack limit. It does not render content or fetch resources. Truncation can make attachment metadata incomplete.
 
 Attachment retrieval uses the one-based index from `mail_read`, rereads the referenced message, and returns at most 2 MiB of decoded attachment bytes. The complete enclosing message must fit the 5 MiB read limit. Bytes are returned as base64; the server does not open or execute files or fetch attachment URLs.
 
@@ -76,13 +76,13 @@ These tools require `mail.write` and `MAIL_ENABLE_WRITES=1`.
 | `mail_save_draft` | `message`, optional `folder` | Append a new composed draft |
 | `mail_delete_permanently` | Message reference | Permanently remove exactly one UID, with an additional delete gate |
 
-Flag operations accept `add` or `remove`, with `\\Seen`, `\\Answered`, `\\Flagged`, `\\Draft`, and permitted conservative ASCII keywords. They never replace the complete flag set or expose `\\Deleted`/`\\Recent` as ordinary flags. The mailbox must permit each requested flag.
+Flag operations accept `add` or `remove`, with `\Seen`, `\Answered`, `\Flagged`, `\Draft`, and permitted conservative ASCII keywords. They never replace the complete flag set or expose `\Deleted`/`\Recent` as ordinary flags. The mailbox must permit each requested flag.
 
-Where CONDSTORE is available, the server snapshots the message's MODSEQ and applies a conditional flag change. A supplied `unchanged_since` requires that capability. Without CONDSTORE, a delta can proceed with a warning that no concurrency precondition was enforced. Reread after conflicts.
+Where CONDSTORE is available, read/search results include `modseq`, and the server snapshots the message's MODSEQ before applying a conditional flag change. Pass the previously observed value as `unchanged_since` to guard against changes since that read. A supplied precondition requires that capability. Without CONDSTORE, a delta can proceed with a warning that no concurrency precondition was enforced. Reread after conflicts.
 
-Move and Trash require native MOVE support. Trash and implicit Drafts/Sent folder selection require a unique server-advertised SPECIAL-USE folder. Names are never guessed. When a copy/move/append succeeds without a destination UID mapping, search the destination before taking another action.
+Move and Trash require native MOVE support. Trash and implicit Drafts/Sent folder selection require a unique server-advertised SPECIAL-USE folder. Names are never guessed. A copy/move with server acceptance but no valid destination UID mapping returns `accepted` and a verification warning: a concurrently disappeared source can make the command an accepted no-op. Search the destination before taking another action. An append without a returned UID similarly requires a fresh search.
 
-Draft saving creates a new message and does not replace an older draft. Its `message` uses the composition shape below. An omitted folder selects the discovered Drafts folder. Updating a draft is a deliberate new-save and separate old-message cleanup, with possible concurrent-client effects.
+Draft saving creates a new message and does not replace an older draft. Its `message` uses the composition shape below. BCC is preserved in the private IMAP draft so another mail client can edit it. An omitted folder selects the discovered Drafts folder. Updating a draft is a deliberate new-save and separate old-message cleanup, with possible concurrent-client effects.
 
 Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-action user confirmation in the trusted client, and targeted UID EXPUNGE support. There is no ordinary mailbox-wide EXPUNGE, folder deletion, or deletion-on-close operation. An interrupted delete can leave a message marked Deleted without confirmed removal; inspect the account before retrying.
 
@@ -126,4 +126,4 @@ Repeated calls for a consumed ID return its recorded status without another SMTP
 
 ## Outside the current surface
 
-There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, arbitrary sorting, active HTML rendering, bulk global expunge, folder deletion, or OAuth login to the upstream mail provider. Provider presets beyond Spacemail are intentionally kept to explicit generic settings for now.
+There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, sorting by subject/sent date, active HTML rendering, bulk global expunge, folder deletion, or OAuth login to the upstream mail provider. Provider presets beyond Spacemail are intentionally kept to explicit generic settings for now.

@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestJWKRestrictions(t *testing.T) {
@@ -90,7 +91,7 @@ func FuzzJWTStructure(f *testing.F) {
 	if err != nil { f.Fatal(err) }
 	// No network is reachable from the fuzz target. Its cache deliberately cannot
 	// contain a key, so random structured tokens are always rejected locally.
-	a.lastAttempt = a.now().Add(24 * 60 * 60 * 1000000000)
+	a.lastAttempt = a.now().Add(24 * time.Hour)
 	f.Fuzz(func(t *testing.T, token string) {
 		if len(token) > maxTokenBytes+1 { return }
 		if _, err := a.verify(t.Context(), token); err == nil { t.Fatal("unsigned fuzz input authorized") }

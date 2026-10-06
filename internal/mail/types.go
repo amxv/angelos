@@ -27,6 +27,7 @@ type Summary struct {
  Date time.Time `json:"date"`
  Flags []string `json:"flags"`
  Size int64 `json:"size_bytes"`
+ ModSeq uint64 `json:"modseq,omitempty"`
 }
 type SearchRequest struct {
  Folder string `json:"folder"`

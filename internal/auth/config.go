@@ -89,8 +89,11 @@ func publicHTTPSURL(raw string) (*url.URL, error) {
 	if err != nil || raw == "" || strings.ContainsAny(raw, "\r\n\t \\?#") || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.Opaque != "" || u.RawPath != "" {
 		return nil, errors.New("invalid public HTTPS URL")
 	}
-	if u.Port() != "" && u.Port() != "443" {
+	if strings.HasSuffix(u.Host, ":") || (u.Port() != "" && u.Port() != "443") {
 		return nil, errors.New("only the standard HTTPS port is supported")
+	}
+	if strings.ContainsFunc(u.Path, unicode.IsControl) || strings.ContainsAny(u.Path, "\\") {
+		return nil, errors.New("invalid URL path")
 	}
 	host := strings.ToLower(u.Hostname())
 	if net.ParseIP(host) != nil || !strings.Contains(host, ".") || len(host) > 253 {

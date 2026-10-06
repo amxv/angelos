@@ -112,18 +112,18 @@ func (b *Backend) Search(ctx context.Context,req SearchRequest)(SearchResult,err
  out.Messages=summaries;return out,nil
 }
 func summaryFromBuffer(buf *imapclient.FetchMessageBuffer,folder string,validity uint32)Summary {
- out:=Summary{Reference:Reference{Folder:folder,UIDValidity:validity,UID:uint32(buf.UID)},From:[]Address{},To:[]Address{},Flags:[]string{},Size:buf.RFC822Size,Date:buf.InternalDate}
+ out:=Summary{Reference:Reference{Folder:folder,UIDValidity:validity,UID:uint32(buf.UID)},From:[]Address{},To:[]Address{},Flags:[]string{},Size:buf.RFC822Size,Date:buf.InternalDate,ModSeq:buf.ModSeq}
  for i,f:=range buf.Flags {if i>=100{break};out.Flags=append(out.Flags,cleanHeader(string(f),256))}
  if e:=buf.Envelope;e!=nil {out.Subject=cleanHeader(e.Subject,4096);out.From=addresses(e.From);out.To=addresses(e.To);if !e.Date.IsZero(){out.Date=e.Date}}
  return out
 }
 func addresses(in []imap.Address)[]Address {out:=make([]Address,0);for i,a:=range in {if i>=100{break};if addr:=a.Addr();addr!="" {out=append(out,Address{Name:cleanHeader(a.Name,1024),Address:cleanHeader(addr,1024)})}};return out}
 func fetchSummaries(s *imapSession,folder string,validity uint32,uids []imap.UID)([]Summary,error) {
- cmd:=s.client.Fetch(imap.UIDSetNum(uids...),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true})
+ cmd:=s.client.Fetch(imap.UIDSetNum(uids...),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,ModSeq:s.client.Caps().Has(imap.CapCondStore)})
  out:=make([]Summary,0,len(uids))
  for data:=cmd.Next();data!=nil;data=cmd.Next(){
   if len(out)>=len(uids){s.cleanup();cmd.Close();return nil,ErrLimit}
-  buf,err:=data.Collect();if err!=nil{s.client.Close();return nil,safeError(err)}
+  buf,err:=data.Collect();if err!=nil{s.cleanup();cmd.Close();return nil,safeError(err)}
   out=append(out,summaryFromBuffer(buf,folder,validity))
  }
  if err:=cmd.Close();err!=nil{return nil,safeError(err)}
@@ -135,8 +135,8 @@ func (b *Backend) Read(ctx context.Context,ref Reference)(Message,error) {
  s,err:=b.connectIMAP(ctx);if err!=nil{return out,err};defer s.close()
  if _,err:=s.selectMailbox(ref.Folder,ref.UIDValidity);err!=nil{return out,err}
  part:=&imap.FetchItemBodySection{Peek:true,Partial:&imap.SectionPartial{Offset:0,Size:maxMessageBytes+1}}
- cmd:=s.client.Fetch(imap.UIDSetNum(imap.UID(ref.UID)),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,BodySection:[]*imap.FetchItemBodySection{part}})
- found:=false;var raw []byte;buf:=&imapclient.FetchMessageBuffer{}
+ cmd:=s.client.Fetch(imap.UIDSetNum(imap.UID(ref.UID)),&imap.FetchOptions{UID:true,Envelope:true,Flags:true,InternalDate:true,RFC822Size:true,ModSeq:s.client.Caps().Has(imap.CapCondStore),BodySection:[]*imap.FetchItemBodySection{part}})
+ found:=false;gotBody:=false;var raw []byte;buf:=&imapclient.FetchMessageBuffer{}
  for data:=cmd.Next();data!=nil;data=cmd.Next(){
   if found{s.cleanup();cmd.Close();return out,ErrLimit};found=true
   for item:=data.Next();item!=nil;item=data.Next(){switch v:=item.(type){
@@ -145,12 +145,15 @@ func (b *Backend) Read(ctx context.Context,ref Reference)(Message,error) {
    case imapclient.FetchItemDataFlags:buf.Flags=v.Flags
    case imapclient.FetchItemDataRFC822Size:buf.RFC822Size=v.Size
    case imapclient.FetchItemDataInternalDate:buf.InternalDate=v.Time
+   case imapclient.FetchItemDataModSeq:buf.ModSeq=v.ModSeq
    case imapclient.FetchItemDataBodySection:
-    if v.Literal!=nil {raw,err=io.ReadAll(io.LimitReader(v.Literal,maxMessageBytes+1));if err!=nil{s.client.Close();return out,safeError(err)};if len(raw)>maxMessageBytes{out.Truncated=true;raw=raw[:maxMessageBytes];s.cleanup()}}
+    if !v.MatchCommand(part){continue};gotBody=true
+    if v.Literal!=nil {raw,err=io.ReadAll(io.LimitReader(v.Literal,maxMessageBytes+1));if err!=nil{s.cleanup();cmd.Close();return out,safeError(err)};if len(raw)>maxMessageBytes{out.Truncated=true;raw=raw[:maxMessageBytes];s.cleanup()}}
   }}
  }
  if err:=cmd.Close();err!=nil&&!out.Truncated{return out,safeError(err)}
  if !found||uint32(buf.UID)!=ref.UID{return out,ErrNotFound}
+ if !gotBody{return out,ErrUnavailable}
  out.Summary=summaryFromBuffer(buf,ref.Folder,ref.UIDValidity)
  if buf.RFC822Size>int64(len(raw)){out.Truncated=true}
  out.raw=raw

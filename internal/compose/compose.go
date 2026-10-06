@@ -97,21 +97,24 @@ func Build(from string, in Input, id string, now time.Time) (Prepared,error) {
  if e=multi.Close();e!=nil{return out,e}
  domain:=strings.SplitN(fromEnvelope[0],"@",2)[1];mid:="<"+id+"@"+domain+">"
  var msg bytes.Buffer
- fmt.Fprintf(&msg,"From: %s\r\n",fromHeader[0]);if len(to)>0{fmt.Fprintf(&msg,"To: %s\r\n",strings.Join(to,", "))};if len(cc)>0{fmt.Fprintf(&msg,"Cc: %s\r\n",strings.Join(cc,", "))}
+ fmt.Fprintf(&msg,"From: %s\r\n",fromHeader[0]);if len(to)>0{fmt.Fprintf(&msg,"To: %s\r\n",strings.Join(to,",\r\n "))};if len(cc)>0{fmt.Fprintf(&msg,"Cc: %s\r\n",strings.Join(cc,",\r\n "))}
  fmt.Fprintf(&msg,"Subject: %s\r\nDate: %s\r\nMessage-ID: %s\r\nMIME-Version: 1.0\r\n",mime.QEncoding.Encode("utf-8",in.Subject),now.UTC().Format(time.RFC1123Z),mid)
  if in.InReplyTo!=""{fmt.Fprintf(&msg,"In-Reply-To: %s\r\n",in.InReplyTo)};if len(in.References)>0{fmt.Fprintf(&msg,"References: %s\r\n",strings.Join(in.References," "))}
  fmt.Fprintf(&msg,"Content-Type: multipart/mixed; boundary=%q\r\n\r\n",boundary);msg.Write(body.Bytes());if msg.Len()>MaxMessageBytes{return out,errors.New("encoded message exceeds 5 MiB")}
+ for _,line:=range bytes.Split(msg.Bytes(),[]byte("\r\n")){if len(line)>998{return out,errors.New("MIME line exceeds SMTP limit; shorten headers")}}
  recipients:=append(append(te,ce...),be...)
  // Digest includes the SMTP envelope (including Bcc) and exact wire bytes.
- binding,_:=json.Marshal(struct{From string;Recipients []string;Raw []byte}{fromEnvelope[0],recipients,msg.Bytes()});sum:=sha256.Sum256(binding)
- out=Prepared{ID:id,Digest:hex.EncodeToString(sum[:]),From:fromEnvelope[0],To:to,Cc:cc,Bcc:bc,Subject:in.Subject,Text:in.Text,Attachments:summaries,MessageID:mid,ExpiresAt:now.Add(15*time.Minute),Raw:msg.Bytes(),Recipients:recipients}
+ digest:=WireDigest(fromEnvelope[0],recipients,msg.Bytes())
+ out=Prepared{ID:id,Digest:digest,From:fromEnvelope[0],To:to,Cc:cc,Bcc:bc,Subject:in.Subject,Text:in.Text,Attachments:summaries,MessageID:mid,ExpiresAt:now.Add(15*time.Minute),Raw:msg.Bytes(),Recipients:recipients}
  return out,nil
 }
 
 // DraftBytes preserves Bcc in the private IMAP draft, never in outbound SMTP.
 func DraftBytes(p Prepared)([]byte,error){
  if len(p.Bcc)==0{return append([]byte(nil),p.Raw...),nil}
- header:="Bcc: "+strings.Join(p.Bcc,", ")+"\r\n"
- if len(header)>998{return nil,errors.New("draft Bcc header too long")}
+ header:="Bcc: "+strings.Join(p.Bcc,",\r\n ")+"\r\n"
  raw:=append([]byte(header),p.Raw...);if len(raw)>MaxMessageBytes{return nil,errors.New("draft too large")};return raw,nil
 }
+
+// WireDigest binds SMTP envelope (including Bcc) to the exact approved MIME bytes.
+func WireDigest(from string,recipients []string,raw []byte)string {binding,_:=json.Marshal(struct{From string;Recipients []string;Raw []byte}{from,recipients,raw});sum:=sha256.Sum256(binding);return hex.EncodeToString(sum[:])}

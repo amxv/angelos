@@ -75,20 +75,21 @@ func (b *Backend) openConn(ctx context.Context,ep config.Endpoint)(net.Conn,func
 }
 func (b *Backend) tlsConfig(host string)*tls.Config {return &tls.Config{ServerName:host,MinVersion:tls.VersionTLS12,RootCAs:b.roots}}
 
-type imapSession struct {client *imapclient.Client; cleanup func()}
+type imapSession struct {client *imapclient.Client; cleanup func(); modified *modifiedResponseTracker}
 func (s *imapSession) close(){s.client.Close();s.cleanup()}
 func (b *Backend) connectIMAP(ctx context.Context)(*imapSession,error) {
  conn,done,err:=b.openConn(ctx,b.config.IMAP);if err!=nil{return nil,err}
  secure:=tls.Client(conn,b.tlsConfig(b.config.IMAP.Host))
  if err:=secure.HandshakeContext(ctx);err!=nil{done();return nil,ErrUnavailable}
- client:=imapclient.New(secure,nil)
+ tracker:=&modifiedResponseTracker{}
+ client:=imapclient.New(&observeModifiedConn{Conn:secure,tracker:tracker},nil)
  if err:=client.WaitGreeting();err!=nil {client.Close();done();return nil,ErrUnavailable}
  if err:=client.Login(b.config.Username,b.config.Password).Wait();err!=nil {client.Close();done();return nil,ErrUnavailable}
- return &imapSession{client:client,cleanup:done},nil
+ return &imapSession{client:client,cleanup:done,modified:tracker},nil
 }
 func (s *imapSession) selectMailbox(folder string, uidValidity uint32)(*imap.SelectData,error) {
  if !validFolder(folder){return nil,ErrInvalidInput}
- data,err:=s.client.Select(folder,&imap.SelectOptions{ReadOnly:true}).Wait()
+ data,err:=s.client.Select(folder,&imap.SelectOptions{ReadOnly:true,CondStore:s.client.Caps().Has(imap.CapCondStore)}).Wait()
  if err!=nil{return nil,ErrUnavailable}
  if data.UIDValidity==0 || data.UIDNext==0 {return nil,ErrUnavailable}
  if uidValidity!=0&&data.UIDValidity!=uidValidity{return nil,ErrStaleReference}

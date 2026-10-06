@@ -7,12 +7,42 @@ import (
 	"errors"
 	"io"
 	netmail "net/mail"
+	"net"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 )
+
+// go-imap beta.8 discards the arguments of an OK [MODIFIED ...] response.
+// Observe this one marker in incoming bytes without storing protocol lines,
+// credentials, message data, or logs. Seeing the marker outside response text
+// can only cause a conservative conflict. It can never permit an unsafe write.
+type modifiedResponseTracker struct {
+	mu sync.Mutex
+	matched int
+	modified bool
+}
+
+func (t *modifiedResponseTracker) reset() { t.mu.Lock(); t.matched = 0; t.modified = false; t.mu.Unlock() }
+func (t *modifiedResponseTracker) seen() bool { t.mu.Lock(); defer t.mu.Unlock(); return t.modified }
+func (t *modifiedResponseTracker) observe(data []byte) {
+	const pattern = "[MODIFIED"
+	t.mu.Lock(); defer t.mu.Unlock()
+	for _,c := range data {
+		if c >= 'a' && c <= 'z' { c -= 'a'-'A' }
+		if c == pattern[t.matched] {
+			t.matched++; if t.matched == len(pattern) { t.modified = true; t.matched = 0 }
+		} else if c == '[' { t.matched = 1 } else { t.matched = 0 }
+	}
+}
+
+type observeModifiedConn struct { net.Conn; tracker *modifiedResponseTracker }
+func (c *observeModifiedConn) Read(data []byte) (int,error) {
+	n,err := c.Conn.Read(data); if n != 0 { c.tracker.observe(data[:n]) }; return n,err
+}
 
 func validWriteReference(ref Reference) bool {
 	return validFolder(ref.Folder) && ref.UIDValidity != 0 && ref.UID != 0
@@ -168,12 +198,15 @@ func (b *Backend) SetFlags(ctx context.Context, req FlagRequest) (FlagResult,err
 	before,err := readFlagSnapshot(s,req.Reference.UID,conditional); if err != nil { return out,err }
 	if req.UnchangedSince != 0 && before.modSeq > req.UnchangedSince { return out,ErrConflict }
 	options := &imap.StoreOptions{}
-	if conditional { options.UnchangedSince = before.modSeq; if req.UnchangedSince != 0 { options.UnchangedSince = req.UnchangedSince } }
-	// Non-silent STORE is essential: go-imap beta.8 does not expose an OK
-	// [MODIFIED] response. An omitted matching FETCH is therefore a conflict,
-	// never silent success. Successful conditional STORE returns MODSEQ.
+	// The explicit precondition was checked above. Also guard against any
+	// change since our own fresh snapshot, even if the supplied value is newer.
+	if conditional { options.UnchangedSince = before.modSeq }
+	if conditional { if s.modified == nil { return out,ErrUnsupported }; s.modified.reset() }
+	// A failed conditional STORE can still return an unsolicited FETCH for
+	// this UID. Check the response marker as well as the returned flag state.
 	after,err := collectFlagSnapshot(s.client.Store(imap.UIDSetNum(imap.UID(req.Reference.UID)),&imap.StoreFlags{Op:op,Flags:flags},options),req.Reference.UID)
 	if err != nil { return out,commandMutationError(err) }
+	if conditional && s.modified.seen() { return out,ErrConflict }
 	if !after.found || !after.hasFlags || (conditional && after.modSeq == 0) || !flagPostcondition(after.flags,flags,op) { return out,ErrConflict }
 	if len(after.flags) > 1000 { return out,ErrOutcomeUnknown }
 	for _,f := range after.flags { out.Flags = append(out.Flags,cleanHeader(string(f),256)) }
@@ -210,7 +243,10 @@ func transferredResult(ref Reference,destination,status string,validity uint32,s
 	if validity != 0 && okSrc && src == ref.UID && okDst {
 		out.Destination = &Reference{Folder:destination,UIDValidity:validity,UID:dst}
 	} else {
-		out.Warnings = []string{"The server confirmed the change but did not provide a valid new UID mapping. Search the destination before acting on the new message."}
+		// A UID that vanished between FETCH and COPY/MOVE can also produce OK
+		// without a mapping. Report acceptance, not proof a copy was created.
+		out.Status = "accepted"
+		out.Warnings = []string{"The server accepted the request but did not provide a valid destination UID. The source may have changed concurrently. Search the destination to verify the outcome before acting or retrying."}
 	}
 	return out
 }
@@ -294,8 +330,10 @@ func (b *Backend) Delete(ctx context.Context, ref Reference) (MutationResult,err
 	conditional := s.client.Caps().Has(imap.CapCondStore) && selected.HighestModSeq != 0
 	before,err := readFlagSnapshot(s,ref.UID,conditional); if err != nil { return out,err }
 	options := &imap.StoreOptions{}; if conditional { options.UnchangedSince = before.modSeq }
+	if conditional { if s.modified == nil { return out,ErrUnsupported }; s.modified.reset() }
 	flagged,err := collectFlagSnapshot(s.client.Store(imap.UIDSetNum(imap.UID(ref.UID)),&imap.StoreFlags{Op:imap.StoreFlagsAdd,Flags:[]imap.Flag{imap.FlagDeleted}},options),ref.UID)
 	if err != nil { out.Status = "unknown"; return out,commandMutationError(err) }
+	if conditional && s.modified.seen() { return out,ErrConflict }
 	if !flagged.found || !flagged.hasFlags || (conditional && flagged.modSeq == 0) || !flagPostcondition(flagged.flags,[]imap.Flag{imap.FlagDeleted},imap.StoreFlagsAdd) { return out,ErrConflict }
 	out.Status = "marked_deleted"
 	if err := s.client.UIDExpunge(imap.UIDSetNum(imap.UID(ref.UID))).Close(); err != nil {

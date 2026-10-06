@@ -18,7 +18,7 @@ func parseMessageAttachment(raw []byte,out *Message,target int) ([]byte,error) {
  if e==nil {out.Warnings=append(out.Warnings,"Message headers could not be parsed within safety limits.");out.Truncated=true;return nil,ErrInvalidInput}
  if err!=nil {out.Warnings=append(out.Warnings,"Some message encoding could not be decoded.")}
  for _,key:=range []string{"From","To","Cc","Reply-To","Subject","Date","Message-Id","In-Reply-To","References"}{v,_:=e.Header.Text(key);if v!=""{out.Headers[key]=cleanHeader(v,4096)}}
- parts:=0;htmlOnly:=false;var text strings.Builder
+ parts:=0;var text,htmlFallback strings.Builder
  var walk func(*message.Entity,int)
  walk=func(e *message.Entity,depth int){
   parts++
@@ -38,7 +38,10 @@ func parseMessageAttachment(raw []byte,out *Message,target int) ([]byte,error) {
    if err!=nil||n>maxMessageBytes{out.Truncated=true;if index==target{attachmentErr=ErrInvalidInput}}
    out.Attachments=append(out.Attachments,Attachment{Index:index,Filename:cleanHeader(filename,1024),ContentType:cleanHeader(ct,256),Size:n});return
   }
-  if ct=="text/html" {htmlOnly=true;return}
+  if ct=="text/html" {
+   if htmlFallback.Len()<maxTextBytes {value,truncated:=htmlText(e.Body);remaining:=maxTextBytes-htmlFallback.Len();if len(value)>remaining{value=clean(value,remaining);truncated=true};htmlFallback.WriteString(value);if truncated{out.Truncated=true}}
+   return
+  }
   if ct!="text/plain"&&ct!="" {return}
   remaining:=maxTextBytes-text.Len();if remaining<=0{out.Truncated=true;return}
   body,err:=io.ReadAll(io.LimitReader(e.Body,int64(remaining+1)));if err!=nil{out.Truncated=true}
@@ -47,7 +50,7 @@ func parseMessageAttachment(raw []byte,out *Message,target int) ([]byte,error) {
  }
  walk(e,0)
  out.Text=clean(text.String(),maxTextBytes)
- if out.Text==""&&htmlOnly{out.Warnings=append(out.Warnings,"HTML-only content omitted; active HTML and remote images are never rendered.")}
+ if out.Text==""&&htmlFallback.Len()>0{out.Text=clean(htmlFallback.String(),maxTextBytes);out.Warnings=append(out.Warnings,"Text extracted from HTML; styling, scripts, links, and remote images are omitted.")}
  if out.Truncated{out.Warnings=append(out.Warnings,"Message exceeds read limits or contains incomplete MIME data; returned content may be partial.")}
  if target>0&&len(out.Attachments)<target{return nil,ErrNotFound}
  return attachmentData,attachmentErr

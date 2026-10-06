@@ -10,13 +10,15 @@ category: Contributing
 
 The documentation site is a self-contained Astro workspace under `docs/` and uses the shared `zuedocs` package for the presentation layer.
 
+Use Bun 1.4.2 as pinned in `docs/package.json` and CI. The existing `bun.lock` uses lockfile version 2, introduced in [Bun 1.4](https://bun.com/blog/bun-v1.4). Older runtimes report an unknown lockfile version; upgrade the runtime instead of discarding or regenerating the lockfile.
+
 ## Local development
 
 From the repository root:
 
 ```bash
 cd docs
-bun install
+bun install --frozen-lockfile
 bun run dev
 ```
 

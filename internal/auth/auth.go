@@ -101,7 +101,9 @@ func (a *Authenticator) MetadataURL() string { return a.metadataURL }
 // Challenge returns an RFC 9728 / RFC 6750 challenge suitable for HTTP headers
 // and MCP mcp/www_authenticate tool metadata. Only known mail scopes are emitted.
 func (a *Authenticator) Challenge(scope string) string {
-	if scope != ScopeWrite && scope != ScopeSend {
+	if scope == ScopeWrite || scope == ScopeSend {
+		scope = ScopeRead + " " + scope
+	} else {
 		scope = ScopeRead
 	}
 	return `Bearer resource_metadata="` + a.metadataURL + `", scope="` + scope + `"`

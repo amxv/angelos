@@ -24,7 +24,7 @@ Read operations use read-only mailbox selection and body peeks so viewing a mess
 
 An email can contain instructions, false urgency, links, or forged requests. Returned mail text is data to inspect, not authority to send mail, change permissions, disclose other messages, or execute commands.
 
-Angelos does not render active HTML or load remote email images. HTML-only content can be omitted with a warning. Read results can be truncated; inspect `truncated` and `warnings` before treating a returned body or attachment inventory as complete.
+Angelos does not render active HTML or load remote email images. It prefers a plain-text MIME alternative and otherwise extracts bounded text from HTML, omitting scripts, styles, attributes, and active content. This extraction is not a browser rendering and can lose formatting or link destinations. Read results can be truncated; inspect `truncated` and `warnings` before treating a returned body or attachment inventory as complete.
 
 ## Confirmation is a client responsibility
 

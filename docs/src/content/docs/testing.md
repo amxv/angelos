@@ -22,7 +22,7 @@ go vet ./...
 go build ./...
 ```
 
-Review `go.mod` and `go.sum` changes before committing. The CI workflow also checks formatting and uploads its module manifests for inspection.
+Review formatting, `go.mod`, and `go.sum` changes before committing. The CI workflow runs Go checks and uploads its module manifests for inspection; review the logs and artifacts for the exact commit under test.
 
 Tests use local fixtures, fake transports, and injected dependencies where appropriate. Unit-test success does not establish that a real provider, OAuth tenant, Redis service, or deployed MCP connection is configured correctly.
 

@@ -203,6 +203,8 @@ func TestClaimsValidation(t *testing.T) {
 		{"wrong audience", func(c map[string]any, f *fixture) { c["aud"] = "https://mail.example.com/other" }, 401},
 		{"missing audience", func(c map[string]any, f *fixture) { delete(c, "aud") }, 401},
 		{"mixed audience types", func(c map[string]any, f *fixture) { c["aud"] = []any{f.a.config.ResourceURL, 2} }, 401},
+		{"null audience entry", func(c map[string]any, f *fixture) { c["aud"] = []any{f.a.config.ResourceURL, nil} }, 401},
+		{"empty audience entry", func(c map[string]any, f *fixture) { c["aud"] = []string{f.a.config.ResourceURL, ""} }, 401},
 		{"wrong subject", func(c map[string]any, f *fixture) { c["sub"] = "another-user" }, 401},
 		{"missing subject", func(c map[string]any, f *fixture) { delete(c, "sub") }, 401},
 		{"expired", func(c map[string]any, f *fixture) { c["exp"] = f.now.Unix() - 1 }, 401},
@@ -343,7 +345,9 @@ func TestMetadataAndChallenge(t *testing.T) {
 		t.Fatal("untrusted challenge URL or scope")
 	}
 	for _, scope := range []string{ScopeRead, ScopeWrite, ScopeSend} {
-		if !strings.Contains(f.a.Challenge(scope), `scope="`+scope+`"`) { t.Fatal("challenge lost scope") }
+		wanted := scope
+		if scope != ScopeRead { wanted = ScopeRead + " " + scope }
+		if !strings.Contains(f.a.Challenge(scope), `scope="`+wanted+`"`) { t.Fatal("challenge lost scope") }
 	}
 	for _, method := range []string{http.MethodHead, http.MethodPost} {
 		w := httptest.NewRecorder()

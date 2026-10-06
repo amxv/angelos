@@ -161,16 +161,21 @@ func hasAudience(raw json.RawMessage, wanted string) bool {
 	if len(raw) > 0 && raw[0] == '"' && json.Unmarshal(raw, &one) == nil {
 		return one == wanted
 	}
-	var many []string
+	var many []json.RawMessage
 	if len(raw) == 0 || raw[0] != '[' || json.Unmarshal(raw, &many) != nil || len(many) == 0 || len(many) > 32 {
 		return false
 	}
-	for _, candidate := range many {
+	matched := false
+	for _, value := range many {
+		var candidate string
+		if len(value) == 0 || value[0] != '"' || json.Unmarshal(value, &candidate) != nil || candidate == "" {
+			return false
+		}
 		if candidate == wanted {
-			return true
+			matched = true
 		}
 	}
-	return false
+	return matched
 }
 
 func validScope(scope string) bool {

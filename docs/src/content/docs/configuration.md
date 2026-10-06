@@ -26,6 +26,7 @@ The process reads environment variables. A `.env` file is not loaded automatical
 | `SMTP_PORT` | `465` | SMTP submission port |
 | `SMTP_TLS_MODE` | `tls`, or `starttls` for port 587 | Required TLS mode |
 | `MAIL_TIMEOUT` | `30s` | Per-operation timeout, between `1s` and `2m` |
+| `PORT` | `8080` | HTTP listening port; Vercel supplies this value |
 
 IMAP uses implicit TLS only. SMTP port 465 requires implicit TLS; port 587 requires STARTTLS. Plaintext SMTP and insecure certificate verification are unsupported. Hosts must be DNS names, not URLs or IP literals.
 
@@ -58,6 +59,10 @@ The current mail login uses a username/password. A provider that requires OAuth 
 Set an enable flag to `1` to opt in. A scoped token does not override a disabled gate. The Redis endpoint must support the command API used by the store, including `SET` and atomic Lua `EVAL`; a raw Redis TCP URL is unsupported.
 
 The store contains private prepared mail for up to 15 minutes and minimal dispatch records for seven days. Review [data handling](/docs/safety) before configuring a third-party store.
+
+## Startup status
+
+`GET /healthz` reports the service version and whether required local configuration validated. It does not test the provider login, fetch OAuth signing keys, or prove Redis is reachable. Incomplete mail or OAuth configuration leaves `/mcp` unavailable with `503`. Incomplete store configuration leaves sending disabled while valid mailbox reads can still run.
 
 ## Secrets and deployment environments
 

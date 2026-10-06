@@ -2,7 +2,7 @@
 
 An agent-native email interface in Go. Angelos exposes a single existing IMAP/SMTP mailbox through a private, OAuth-protected remote MCP server. Your other mail clients can keep using the same account.
 
-The repository is under active development. Optional mailbox writes, permanent deletion, and SMTP sending are disabled by default.
+The repository is private while under active development and is intended to be open sourced later. Optional mailbox writes, permanent deletion, and SMTP sending are disabled by default.
 
 ## Capabilities
 

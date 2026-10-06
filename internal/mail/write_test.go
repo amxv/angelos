@@ -145,6 +145,21 @@ func TestSetFlagsReportsConcurrentModification(t *testing.T) {
 	if !errors.Is(err,ErrConflict) { t.Fatalf("got %v, want conflict",err) }
 }
 
+func TestConditionalConflictWithMatchingUnsolicitedFlags(t *testing.T) {
+	// RFC 7162 permits this FETCH even though the STORE failed its guard.
+	b := writeTestBackend(t,"IMAP4rev1 CONDSTORE",[]writeStep{selectWriteStep(9,true),fetchFlagStep("",12),{contains:`UID STORE 17 (UNCHANGEDSINCE 12) +FLAGS (\Seen)`,reply:"* 4 FETCH (UID 17 FLAGS (\\Seen) MODSEQ (13))\r\n{tag} OK [MODIFIED 17] another client changed it\r\n"}})
+	_,err := b.SetFlags(context.Background(),FlagRequest{Reference:testWriteRef(),Operation:"add",Flags:[]string{`\Seen`}})
+	if !errors.Is(err,ErrConflict) { t.Fatalf("got %v, want conflict despite matching FETCH",err) }
+}
+
+func TestModifiedTrackerHandlesChunkBoundariesWithoutKeepingPayload(t *testing.T) {
+	tracker := &modifiedResponseTracker{}
+	for _,part := range []string{"T2 OK [mo","di","fied 17] concurrent update\r\n"} { tracker.observe([]byte(part)) }
+	if !tracker.seen() { t.Fatal("split MODIFIED marker missed") }
+	tracker.reset(); tracker.observe([]byte("T3 OK stored\r\n")); if tracker.seen() { t.Fatal("previous response leaked into next command") }
+	tracker.observe([]byte("[[MODIFIED")); if !tracker.seen() { t.Fatal("overlapping prefix missed") }
+}
+
 func TestSetFlagsRejectsStaleModSeqBeforeMutation(t *testing.T) {
 	b := writeTestBackend(t,"IMAP4rev1 CONDSTORE",[]writeStep{selectWriteStep(9,true),fetchFlagStep("",13)})
 	_,err := b.SetFlags(context.Background(),FlagRequest{Reference:testWriteRef(),Operation:"add",Flags:[]string{`\Seen`},UnchangedSince:12})
@@ -212,7 +227,7 @@ func TestTrashRefusesMissingOrAmbiguousSpecialUse(t *testing.T) {
 
 func TestTrashUsesAdvertisedFolderName(t *testing.T) {
 	b := writeTestBackend(t,"IMAP4rev1 MOVE SPECIAL-USE",[]writeStep{{contains:"LIST ",reply:"* LIST (\\Trash) \"/\" \"Deleted Messages\"\r\n{tag} OK listed\r\n"},selectWriteStep(9,false),fetchFlagStep("",0),{contains:`UID MOVE 17 "Deleted Messages"`,reply:"{tag} OK moved\r\n"}})
-	got,err := b.Trash(context.Background(),testWriteRef()); if err != nil { t.Fatal(err) }; if got.Status != "moved" || got.Destination != nil || len(got.Warnings) == 0 { t.Fatalf("wrong result: %+v",got) }
+	got,err := b.Trash(context.Background(),testWriteRef()); if err != nil { t.Fatal(err) }; if got.Status != "accepted" || got.Destination != nil || len(got.Warnings) == 0 { t.Fatalf("wrong result: %+v",got) }
 }
 
 func TestAppendDraftPreservesLiteralAndReturnsUID(t *testing.T) {
@@ -237,6 +252,11 @@ func TestDeleteExpungesOnlyRequestedUIDThenVerifies(t *testing.T) {
 func TestDeleteReportsPartialFailureWithoutGlobalExpunge(t *testing.T) {
 	b := writeTestBackend(t,"IMAP4rev1 UIDPLUS",[]writeStep{selectWriteStep(9,false),fetchFlagStep("",0),{contains:`UID STORE 17 +FLAGS (\Deleted)`,reply:"* 4 FETCH (UID 17 FLAGS (\\Deleted))\r\n{tag} OK flagged\r\n"},{contains:"UID EXPUNGE 17",reply:"{tag} NO cannot expunge now\r\n"}})
 	got,err := b.Delete(context.Background(),testWriteRef()); if !errors.Is(err,ErrOutcomeUnknown) || got.Status != "marked_deleted" || len(got.Warnings) == 0 { t.Fatalf("got %+v, %v",got,err) }
+}
+
+func TestDeleteNeverExpungesAfterConditionalConflict(t *testing.T) {
+	b := writeTestBackend(t,"IMAP4rev1 UIDPLUS CONDSTORE",[]writeStep{selectWriteStep(9,true),fetchFlagStep("",12),{contains:`UID STORE 17 (UNCHANGEDSINCE 12) +FLAGS (\Deleted)`,reply:"* 4 FETCH (UID 17 FLAGS (\\Deleted) MODSEQ (13))\r\n{tag} OK [MODIFIED 17] concurrent flags\r\n"}})
+	got,err := b.Delete(context.Background(),testWriteRef()); if !errors.Is(err,ErrConflict) || got.Status != "not_applied" { t.Fatalf("got %+v, %v",got,err) }
 }
 
 func TestCopyConnectionLossIsUnknownNotRetryableSuccess(t *testing.T) {

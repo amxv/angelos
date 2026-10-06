@@ -23,7 +23,7 @@ Set these environment variables on the API deployment:
 | `MCP_OAUTH_JWKS_URL` | Public HTTPS signing-key endpoint on the issuer's origin |
 | `MCP_ALLOWED_SUBJECTS` | Comma-separated allowlist of exact OAuth `sub` identifiers, between 1 and 32 entries |
 
-Use the stable production API URL as the resource identifier. The audience comparison is exact, including paths and trailing slashes. Changing the identifier requires corresponding issuer/client configuration changes.
+Use the stable production API URL ending in `/mcp` as the resource identifier. The running service requires that exact path, without a trailing slash. The audience comparison is exact. Changing the identifier requires corresponding issuer/client configuration changes.
 
 URLs must use public DNS names and HTTPS on port 443. Credentials, query strings, fragments, IP literals, and redirects are rejected. The JWKS endpoint must have the same hostname and effective port as the issuer. Providers that host keys on a different origin require an implementation change; do not work around this restriction by disabling verification.
 
@@ -58,5 +58,7 @@ See the current [OpenAI MCP setup guide](https://developers.openai.com/api/docs/
 ## Signing-key rotation and troubleshooting
 
 Signing keys are fetched on demand and cached for five minutes. An unknown key ID can trigger a refresh, limited to once a minute. Fetches have a five-second timeout and bounded response size; redirects are not followed.
+
+Validation is local after keys are cached. There is no token-introspection request, token-revocation lookup, or replay ledger. Use short-lived access tokens. Removing a signing key can take up to the cache lifetime to affect an instance; changing the subject allowlist requires restarting or redeploying with the new configuration.
 
 Check exact issuer, audience, subject, scope, and time claims when authorization fails. Check that the published JWKS includes the signing key and is reachable at its configured public address. Do not log access tokens, mailbox passwords, or complete private mail while debugging.

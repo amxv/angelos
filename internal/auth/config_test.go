@@ -50,7 +50,7 @@ func TestPublicURLValidation(t *testing.T) {
 	for _, raw := range []string{
 		"", "/mcp", "http://mail.example.com/mcp", "https://localhost/mcp", "https://mail.local/mcp", "https://mail.internal/mcp", "https://mail.test/mcp",
 		"https://127.0.0.1/mcp", "https://[::1]/mcp", "https://10.0.0.1/mcp", "https://192.168.1.1/mcp", "https://169.254.169.254/mcp", "https://8.8.8.8/mcp",
-		"https://login.example.com:8443/jwks", "https://user:pass@login.example.com/jwks", "https://login.example.com/jwks?key=x", "https://login.example.com/jwks?", "https://login.example.com/jwks#part", "https://login.example.com/jwks#",
+		"https://login.example.com:8443/jwks", "https://login.example.com:/jwks", "https://user:pass@login.example.com/jwks", "https://login.example.com/jwks?key=x", "https://login.example.com/jwks?", "https://login.example.com/jwks#part", "https://login.example.com/jwks#", "https://login.example.com/%00jwks", "https://login.example.com/%5Cjwks",
 		"https://login.example.com./jwks", "https://-login.example.com/jwks", "https://login..example.com/jwks", "https://foo_bar.example.com/jwks",
 		"https://login.example.com/../jwks", "https://login.example.com/%2e%2e/jwks", "https://login.example.com/a\\b", "https://login.example.com/a\nb",
 	} {
