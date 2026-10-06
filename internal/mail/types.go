@@ -53,6 +53,13 @@ type SearchRequest struct {
 	Flagged *bool  `json:"flagged,omitempty"`
 	Cursor  string `json:"cursor,omitempty"`
 	Limit   int    `json:"limit,omitempty"`
+
+	// MessageID is exact and case-sensitive. Accepts a modern ASCII dot-atom
+	// or domain-literal ID, optionally angle-bracketed; no input comments.
+	MessageID string `json:"message_id,omitempty"`
+	// Participant is IMAP case-insensitive header substring matching across
+	// From, Reply-To, To, or Cc. Bcc is deliberately excluded.
+	Participant string `json:"participant,omitempty"`
 }
 type SearchResult struct {
 	Messages    []Summary `json:"messages"`

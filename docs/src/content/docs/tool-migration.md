@@ -8,7 +8,7 @@ category: Reference
 
 # Migration and token budget
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Version **0.3.0** retains those six names and adds the preparation features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The mailbox, authentication, provider configuration, send store, and existing prepared IDs/digests are unchanged.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0** and **0.4.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The mailbox, authentication, provider configuration, send store, and existing prepared IDs/digests are unchanged.
 
 ## Operation parity
 
@@ -85,3 +85,10 @@ Refresh discovery again for `mail_prepare` action `reply_all`, optional authored
 For replies, omitted To/Cc can now be derived from complete source metadata and configured self aliases. Explicit arrays keep replacement semantics; `[]` clears a field and `null` is rejected. Reply quotations are now included by default; set `quote_original: false` to retain an authored-body-only reply. Existing explicitly supplied recipients, full previews, approval digests, and consumed-send behavior remain intact. Review both body alternatives before sending.
 
 See [Natural replies and forwards](/docs/natural-messages) for exact behavior and privacy limits. The version 0.2 size measurements above are historical snapshots; additional version 0.3 functionality remains covered by the repository's compact discovery regression budget.
+
+
+## Version 0.4 lookup additions
+
+Refresh discovery for `mail_query` action `send_status` (`prepared_id`), and optional search `message_id`/`participant` filters. There are six tools and 19 operations. Default searches and their existing cursor serialization are preserved; new filter values bind their cursors. Exact-ID search verifies complete case-preserved headers, while participant search is explicitly a substring operator across visible address fields.
+
+Send-status inspection is read-only, requires `mail.read` plus `mail.send`, and works with a valid store even when sends are disabled. New records bind ownership to the verified issuer/resource/subject. Older unowned receipts remain unavailable to this new lookup; their existing exact-ID/digest send behavior and TTLs are unchanged. See the [receipt reference](/docs/tools#inspect-a-send-receipt-without-sending) and [ownership model](/docs/authentication#preparation-ownership).

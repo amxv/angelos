@@ -19,14 +19,16 @@ type memoryStore struct {
 	completeFails bool
 }
 
-func (s *memoryStore) Put(_ context.Context, p compose.Prepared) error {
-	s.record = dispatch.Record{Message: p, Status: "prepared"}
-	return nil
-}
-func (s *memoryStore) Claim(_ context.Context, id, digest string, _ time.Time) (dispatch.Record, bool, error) {
+func (s *memoryStore) Put(_ context.Context, p compose.Prepared, owner string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if id != s.record.Message.ID || digest != s.record.Message.Digest {
+	s.record = dispatch.Record{Message: p, Owner: owner, Status: "prepared", ExpiresUnix: p.ExpiresAt.Unix()}
+	return nil
+}
+func (s *memoryStore) Claim(_ context.Context, id, digest, owner string, _ time.Time) (dispatch.Record, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id != s.record.Message.ID || digest != s.record.Message.Digest || (s.record.Owner != "" && s.record.Owner != owner) {
 		return dispatch.Record{}, false, errors.New("mismatch")
 	}
 	if s.claimed {
@@ -45,6 +47,20 @@ func (s *memoryStore) Complete(_ context.Context, _ string, status, detail strin
 	s.record.Status = status
 	s.record.Detail = detail
 	return nil
+}
+
+func (s *memoryStore) Status(_ context.Context, id, owner string, now time.Time) (dispatch.SendStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id != s.record.Message.ID || owner == "" || owner != s.record.Owner {
+		return dispatch.SendStatus{Status: "unavailable"}, nil
+	}
+	status := s.record.Status
+	if status == "prepared" && s.record.ExpiresUnix <= now.Unix() {
+		status = "expired"
+	}
+	expires := time.Unix(s.record.ExpiresUnix, 0).UTC()
+	return dispatch.SendStatus{Status: status, MessageID: s.record.Message.MessageID, ExpiresAt: &expires, Stage: s.record.Detail}, nil
 }
 
 type fakeSender struct {
@@ -76,7 +92,7 @@ func TestSendConsumesIDOnceConcurrent(t *testing.T) {
 			p.ExpiresAt = time.Now().Add(time.Minute)
 			p.Digest = compose.WireDigest(p.From, p.Recipients, p.Raw)
 			store := &memoryStore{}
-			store.Put(context.Background(), p)
+			store.Put(context.Background(), p, "")
 			sender := &fakeSender{status: status, appendError: true}
 			a := &App{Store: store, Submitter: sender}
 			var wg sync.WaitGroup
@@ -115,7 +131,7 @@ func TestStatusFailureDoesNotRetry(t *testing.T) {
 	p.ExpiresAt = time.Now().Add(time.Minute)
 	p.Digest = compose.WireDigest(p.From, p.Recipients, p.Raw)
 	store := &memoryStore{completeFails: true}
-	store.Put(context.Background(), p)
+	store.Put(context.Background(), p, "")
 	sender := &fakeSender{status: "accepted"}
 	a := &App{Store: store, Submitter: sender}
 	for i := 0; i < 2; i++ {
@@ -132,7 +148,7 @@ func TestCorruptPreparedContentDoesNotSend(t *testing.T) {
 	p.Digest = compose.WireDigest(p.From, p.Recipients, p.Raw)
 	p.Raw = []byte("modified")
 	store := &memoryStore{}
-	store.Put(context.Background(), p)
+	store.Put(context.Background(), p, "")
 	sender := &fakeSender{}
 	a := &App{Store: store, Submitter: sender}
 	if _, e := a.send(context.Background(), sendInput{p.ID, p.Digest, false}); e == nil || sender.calls != 0 {

@@ -70,7 +70,7 @@ func newGroupedAuthFixture(t *testing.T) *groupedAuthFixture {
 	transport := server.Client().Transport
 	gate, err := auth.New(auth.Config{
 		ResourceURL: "https://mail.example.com/mcp", Issuer: "https://login.example.com/",
-		JWKSURL: "https://login.example.com/jwks", AllowedSubjects: []string{"grouped-test-owner"},
+		JWKSURL: "https://login.example.com/jwks", AllowedSubjects: []string{"grouped-test-owner", "grouped-test-other"},
 		HTTPClient: &http.Client{Transport: groupedRoundTripper(func(r *http.Request) (*http.Response, error) {
 			if r.URL.String() != "https://login.example.com/jwks" {
 				return nil, fmt.Errorf("unexpected outbound URL: %s", r.URL)
@@ -89,6 +89,11 @@ func newGroupedAuthFixture(t *testing.T) *groupedAuthFixture {
 
 func (f *groupedAuthFixture) token(t *testing.T, scope string) string {
 	t.Helper()
+	return f.tokenFor(t, scope, "grouped-test-owner")
+}
+
+func (f *groupedAuthFixture) tokenFor(t *testing.T, scope, subject string) string {
+	t.Helper()
 	encode := func(v any) string {
 		data, err := json.Marshal(v)
 		if err != nil {
@@ -98,7 +103,7 @@ func (f *groupedAuthFixture) token(t *testing.T, scope string) string {
 	}
 	now := time.Now()
 	payload := encode(map[string]any{"alg": "ES256", "kid": "grouped-test-key", "typ": "at+jwt"}) + "." + encode(map[string]any{
-		"iss": "https://login.example.com/", "aud": "https://mail.example.com/mcp", "sub": "grouped-test-owner",
+		"iss": "https://login.example.com/", "aud": "https://mail.example.com/mcp", "sub": subject,
 		"scope": scope, "iat": now.Add(-time.Minute).Unix(), "exp": now.Add(time.Hour).Unix(),
 	})
 	digest := sha256.Sum256([]byte(payload))
@@ -112,9 +117,14 @@ func (f *groupedAuthFixture) token(t *testing.T, scope string) string {
 
 func (f *groupedAuthFixture) call(t *testing.T, a *App, scope, name, arguments string) (int, map[string]any) {
 	t.Helper()
+	return f.callFor(t, a, scope, "grouped-test-owner", name, arguments)
+}
+
+func (f *groupedAuthFixture) callFor(t *testing.T, a *App, scope, subject, name, arguments string) (int, map[string]any) {
+	t.Helper()
 	payload := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":` + fmt.Sprintf("%q", name) + `,"arguments":` + arguments + `}}`
 	r := httptest.NewRequest(http.MethodPost, "https://mail.example.com/mcp", strings.NewReader(payload))
-	r.Header.Set("Authorization", "Bearer "+f.token(t, scope))
+	r.Header.Set("Authorization", "Bearer "+f.tokenFor(t, scope, subject))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json, text/event-stream")
 	r.Header.Set("MCP-Protocol-Version", "2025-11-25")
@@ -245,20 +255,25 @@ func (b *groupedBackend) AppendSent(context.Context, []byte) (mail.MutationResul
 
 type groupedStore struct {
 	memoryStore
-	puts, claims, completes int
+	puts, claims, completes, statuses int
 }
 
-func (s *groupedStore) Put(ctx context.Context, p compose.Prepared) error {
+func (s *groupedStore) Put(ctx context.Context, p compose.Prepared, owner string) error {
 	s.puts++
-	return s.memoryStore.Put(ctx, p)
+	return s.memoryStore.Put(ctx, p, owner)
 }
-func (s *groupedStore) Claim(ctx context.Context, id, digest string, now time.Time) (dispatch.Record, bool, error) {
+func (s *groupedStore) Claim(ctx context.Context, id, digest, owner string, now time.Time) (dispatch.Record, bool, error) {
 	s.claims++
-	return s.memoryStore.Claim(ctx, id, digest, now)
+	return s.memoryStore.Claim(ctx, id, digest, owner, now)
 }
 func (s *groupedStore) Complete(ctx context.Context, id, status, detail string) error {
 	s.completes++
 	return s.memoryStore.Complete(ctx, id, status, detail)
+}
+
+func (s *groupedStore) Status(ctx context.Context, id, owner string, now time.Time) (dispatch.SendStatus, error) {
+	s.statuses++
+	return s.memoryStore.Status(ctx, id, owner, now)
 }
 
 func newGroupedApp() (*App, *groupedBackend, *groupedStore) {
@@ -273,7 +288,7 @@ func groupedSeedSend(t *testing.T, store *groupedStore) string {
 		t.Fatal(err)
 	}
 	// Seeding test state is not a tool invocation and must not count as one.
-	if err := store.memoryStore.Put(context.Background(), p); err != nil {
+	if err := store.memoryStore.Put(context.Background(), p, ""); err != nil {
 		t.Fatal(err)
 	}
 	return fmt.Sprintf(`{"prepared_id":%q,"confirmed_digest":%q,"append_sent":false}`, p.ID, p.Digest)
@@ -290,7 +305,7 @@ func groupedOperations() []groupedOperation {
 	return []groupedOperation{
 		{"capabilities", "mail_query", `{"action":"capabilities"}`, "mail.read", []string{"capabilities"}, 0},
 		{"folders", "mail_query", `{"action":"folders"}`, "mail.read", []string{"folders"}, 0},
-		{"search", "mail_query", `{"action":"search","search":{"folder":"INBOX","query":"invoice","order":"oldest","from":"from@example.com","to":"owner@example.com","subject":"Due","since":"2026-01-01","before":"2026-02-01","unread":false,"flagged":false,"cursor":"input-cursor","limit":7}}`, "mail.read", []string{"search"}, 0},
+		{"search", "mail_query", `{"action":"search","search":{"folder":"INBOX","query":"invoice","order":"oldest","from":"from@example.com","to":"owner@example.com","subject":"Due","message_id":"<Case@Example.com>","participant":"Person","since":"2026-01-01","before":"2026-02-01","unread":false,"flagged":false,"cursor":"input-cursor","limit":7}}`, "mail.read", []string{"search"}, 0},
 		{"read", "mail_query", `{"action":"read","reference":` + ref + `}`, "mail.read", []string{"read"}, 0},
 		{"attachment", "mail_query", `{"action":"attachment","reference":` + ref + `,"index":1}`, "mail.read", []string{"attachment"}, 0},
 		{"folder", "mail_create", `{"action":"folder","name":"Projects"}`, "mail.write", []string{"folder"}, 0},

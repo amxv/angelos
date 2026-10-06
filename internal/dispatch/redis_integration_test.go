@@ -109,10 +109,10 @@ func TestRedisAtomicClaimAndRetention(t *testing.T) {
 		t.Fatal(e)
 	}
 	ctx := context.Background()
-	if e = r.Put(ctx, p); e != nil {
+	if e = r.Put(ctx, p, strings.Repeat("c", 64)); e != nil {
 		t.Fatal(e)
 	}
-	if _, _, e = r.Claim(ctx, p.ID, strings.Repeat("a", 64), time.Now()); e == nil {
+	if _, _, e = r.Claim(ctx, p.ID, strings.Repeat("a", 64), strings.Repeat("c", 64), time.Now()); e == nil {
 		t.Fatal("digest mismatch accepted")
 	}
 	var claims atomic.Int32
@@ -121,7 +121,7 @@ func TestRedisAtomicClaimAndRetention(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rec, ok, e := r.Claim(ctx, p.ID, p.Digest, time.Now())
+			rec, ok, e := r.Claim(ctx, p.ID, p.Digest, strings.Repeat("c", 64), time.Now())
 			if e != nil {
 				t.Error(e)
 				return
@@ -151,7 +151,7 @@ func TestRedisAtomicClaimAndRetention(t *testing.T) {
 	if e = r.Complete(ctx, p.ID, "accepted", "acknowledgement"); e != nil {
 		t.Fatal(e)
 	}
-	rec, ok, e := r.Claim(ctx, p.ID, p.Digest, time.Now())
+	rec, ok, e := r.Claim(ctx, p.ID, p.Digest, strings.Repeat("c", 64), time.Now())
 	if e != nil || ok || rec.Status != "accepted" {
 		t.Fatalf("duplicate replay %v %v %s", e, ok, rec.Status)
 	}
@@ -171,10 +171,10 @@ func TestRedisExpiredPreparationNotClaimed(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = r.Put(context.Background(), p); e != nil {
+	if e = r.Put(context.Background(), p, strings.Repeat("c", 64)); e != nil {
 		t.Fatal(e)
 	}
-	if _, _, e = r.Claim(context.Background(), p.ID, p.Digest, time.Now()); e == nil {
+	if _, _, e = r.Claim(context.Background(), p.ID, p.Digest, strings.Repeat("c", 64), time.Now()); e == nil {
 		t.Fatal("expired preparation accepted")
 	}
 }

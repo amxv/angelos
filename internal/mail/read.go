@@ -1,11 +1,14 @@
 package mail
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net/textproto"
 	"sort"
 	"strings"
 	"time"
@@ -17,10 +20,12 @@ import (
 )
 
 const (
-	maxFolders      = 1000
-	searchWindow    = 1000
-	maxMessageBytes = 5 << 20
-	maxTextBytes    = 256 << 10
+	maxFolders             = 1000
+	searchWindow           = 1000
+	maxMessageBytes        = 5 << 20
+	maxTextBytes           = 256 << 10
+	searchFetchBatch       = 16
+	maxSearchIDHeaderBytes = 64 << 10
 )
 
 func validFolder(s string) bool {
@@ -142,8 +147,17 @@ func (b *Backend) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 			return out, ErrInvalidInput
 		}
 	}
-	var since, before time.Time
+	if len(req.Participant) > 1024 || !utf8.ValidString(req.Participant) || strings.IndexFunc(req.Participant, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) >= 0 {
+		return out, ErrInvalidInput
+	}
 	var err error
+	if req.MessageID != "" {
+		req.MessageID, err = normalizeSearchMessageID(req.MessageID)
+		if err != nil {
+			return out, err
+		}
+	}
+	var since, before time.Time
 	if req.Since != "" {
 		since, err = time.Parse("2006-01-02", req.Since)
 		if err != nil {
@@ -208,7 +222,9 @@ func (b *Backend) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 		}
 	} else {
 		if cur.Before != 0 {
-			if cur.Before > uint32(selected.UIDNext) {
+			// The exclusive continuation bound must stay inside the frozen
+			// snapshot, even if newer arrivals increased the current UIDNEXT.
+			if uint64(cur.Before) > uint64(ceiling)+1 {
 				return out, ErrInvalidInput
 			}
 			high = cur.Before - 1
@@ -226,10 +242,20 @@ func (b *Backend) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 	}
 	criteria.Since = since
 	criteria.Before = before
-	for _, h := range []struct{ k, v string }{{"From", req.From}, {"To", req.To}, {"Subject", req.Subject}} {
+	for _, h := range []struct{ k, v string }{{"From", req.From}, {"To", req.To}, {"Subject", req.Subject}, {"Message-ID", req.MessageID}} {
 		if h.v != "" {
 			criteria.Header = append(criteria.Header, imap.SearchCriteriaHeaderField{Key: h.k, Value: h.v})
 		}
+	}
+	if req.Participant != "" {
+		header := func(key string) imap.SearchCriteria {
+			return imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: key, Value: req.Participant}}}
+		}
+		// Nested binary OR stays one term in the surrounding AND criteria.
+		criteria.Or = append(criteria.Or, [2]imap.SearchCriteria{
+			{Or: [][2]imap.SearchCriteria{{header("From"), header("Reply-To")}}},
+			{Or: [][2]imap.SearchCriteria{{header("To"), header("Cc")}}},
+		})
 	}
 	if req.Unread != nil {
 		if *req.Unread {
@@ -275,6 +301,33 @@ func (b *Backend) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 		}
 	}
 	out.ScannedUIDs = int(high - low + 1)
+	if req.MessageID != "" {
+		// HEADER SEARCH is case-insensitive substring matching. Verify before
+		// consuming the result quota, including candidates lost to expunge.
+		summaries, last, exhausted, err := fetchExactSearchPage(s, req.Folder, selected.UIDValidity, matches, req.MessageID, req.Limit)
+		if err != nil {
+			return out, err
+		}
+		out.Messages = summaries
+		if req.Order == "oldest" {
+			next := uint64(high) + 1
+			if !exhausted {
+				next = uint64(last) + 1
+			}
+			if next <= uint64(ceiling) {
+				out.NextCursor = encodeCursor(cursor{Version: selected.UIDValidity, Before: uint32(next), Scope: scope, Upper: ceiling})
+			}
+		} else {
+			next := low
+			if !exhausted {
+				next = uint32(last)
+			}
+			if next > 1 {
+				out.NextCursor = encodeCursor(cursor{Version: selected.UIDValidity, Before: next, Scope: scope, Upper: ceiling})
+			}
+		}
+		return out, nil
+	}
 	if req.Order == "oldest" {
 		next := uint64(high) + 1
 		if len(matches) > req.Limit {
@@ -337,27 +390,258 @@ func addresses(in []imap.Address) []Address {
 	}
 	return out
 }
-func fetchSummaries(s *imapSession, folder string, validity uint32, uids []imap.UID) ([]Summary, error) {
-	cmd := s.client.Fetch(imap.UIDSetNum(uids...), &imap.FetchOptions{UID: true, Envelope: true, Flags: true, InternalDate: true, RFC822Size: true, ModSeq: s.modseq})
-	out := make([]Summary, 0, len(uids))
-	for data := cmd.Next(); data != nil; data = cmd.Next() {
-		if len(out) >= len(uids) {
-			s.cleanup()
-			cmd.Close()
-			return nil, ErrLimit
+
+// normalizeSearchMessageID accepts modern ASCII dot-atom IDs (including a
+// no-fold domain literal), with optional angle brackets and outer spaces.
+// Obsolete quoted/CFWS-inside-ID forms are rejected, never rewritten.
+func normalizeSearchMessageID(raw string) (string, error) {
+	if len(raw) > 1024 {
+		return "", ErrInvalidInput
+	}
+	raw = strings.Trim(raw, " ")
+	if raw == "" {
+		return "", ErrInvalidInput
+	}
+	if raw[0] != '<' {
+		raw = "<" + raw + ">"
+	}
+	id, n, ok := parseSearchMessageID(raw)
+	if !ok || n != len(raw) {
+		return "", ErrInvalidInput
+	}
+	return id, nil
+}
+
+func searchIDDotAtom(s string) bool {
+	if s == "" || s[0] == '.' || s[len(s)-1] == '.' || strings.Contains(s, "..") {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("!#$%&'*+-/=?^_`{|}~.", rune(c))) {
+			return false
 		}
-		buf, err := data.Collect()
+	}
+	return true
+}
+
+// parseSearchMessageID consumes exactly one bracketed ID, retaining its octets.
+func parseSearchMessageID(s string) (string, int, bool) {
+	if len(s) < 5 || s[0] != '<' {
+		return "", 0, false
+	}
+	at := strings.IndexByte(s, '@')
+	if at < 2 || !searchIDDotAtom(s[1:at]) {
+		return "", 0, false
+	}
+	right := at + 1
+	if right >= len(s) {
+		return "", 0, false
+	}
+	var end int
+	if s[right] == '[' {
+		end = right + 1
+		for end < len(s) && s[end] != ']' {
+			c := s[end]
+			if !(c >= 33 && c <= 90 || c >= 94 && c <= 126) {
+				return "", 0, false
+			}
+			end++
+		}
+		end++ // closing domain-literal bracket
+	} else {
+		closing := strings.IndexByte(s[right:], '>')
+		if closing < 0 {
+			return "", 0, false
+		}
+		end = right + closing
+		if !searchIDDotAtom(s[right:end]) {
+			return "", 0, false
+		}
+	}
+	if end >= len(s) || s[end] != '>' {
+		return "", 0, false
+	}
+	return s[1:end], end + 1, true
+}
+
+// skipSearchIDCFWS accepts unfolded RFC 5322 whitespace and nested comments.
+// It allocates nothing and rejects malformed comments and control characters.
+func skipSearchIDCFWS(s string) (string, bool) {
+	for {
+		s = strings.TrimLeft(s, " \t")
+		if s == "" || s[0] != '(' {
+			return s, true
+		}
+		depth, i := 1, 1
+		for i < len(s) && depth > 0 {
+			c := s[i]
+			if c == '\\' {
+				i++
+				if i == len(s) || s[i] < 32 && s[i] != '\t' || s[i] == 127 {
+					return "", false
+				}
+			} else if c == '(' {
+				depth++
+			} else if c == ')' {
+				depth--
+			} else if c < 32 && c != '\t' || c == 127 {
+				return "", false
+			}
+			i++
+		}
+		if depth != 0 {
+			return "", false
+		}
+		s = s[i:]
+	}
+}
+
+// exactSearchMessageID requires a complete selected-header section. An absent
+// or malformed/duplicate Message-ID is not a match; an incomplete provider
+// response is an error, since accepting a prefix could conceal another ID.
+func exactSearchMessageID(raw []byte, wanted string) (bool, error) {
+	if len(raw) > maxSearchIDHeaderBytes {
+		return false, ErrLimit
+	}
+	if !bytes.Equal(raw, []byte("\r\n")) && (bytes.Index(raw, []byte("\r\n\r\n")) != len(raw)-4 || len(raw) < 4) {
+		return false, ErrUnavailable
+	}
+	if !utf8.Valid(raw) {
+		return false, nil
+	}
+	// net/textproto accepts bare LF. Here only complete CRLF framing counts.
+	for i, c := range raw {
+		if c == '\n' && (i == 0 || raw[i-1] != '\r') || c == '\r' && (i+1 == len(raw) || raw[i+1] != '\n') || c < 32 && c != '\r' && c != '\n' && c != '\t' || c == 127 {
+			return false, nil
+		}
+	}
+	h, err := textproto.NewReader(bufio.NewReader(bytes.NewReader(raw))).ReadMIMEHeader()
+	if err != nil || len(h.Values("Message-ID")) != 1 {
+		return false, nil
+	}
+	value, ok := skipSearchIDCFWS(h.Get("Message-ID"))
+	if !ok {
+		return false, nil
+	}
+	id, n, ok := parseSearchMessageID(value)
+	if !ok {
+		return false, nil
+	}
+	rest, ok := skipSearchIDCFWS(value[n:])
+	return ok && rest == "" && id == wanted, nil
+}
+
+// fetchExactSearchPage consumes candidates in the requested UID order, while
+// fetching at most one small batch at a time. If the quota fills inside a batch,
+// its unreturned candidates remain eligible on the next page.
+func fetchExactSearchPage(s *imapSession, folder string, validity uint32, uids []imap.UID, messageID string, limit int) ([]Summary, imap.UID, bool, error) {
+	out := make([]Summary, 0, limit)
+	for start := 0; start < len(uids); start += searchFetchBatch {
+		end := min(start+searchFetchBatch, len(uids))
+		summaries, err := fetchSearchSummaries(s, folder, validity, uids[start:end], messageID)
 		if err != nil {
-			s.cleanup()
-			cmd.Close()
-			return nil, safeError(err)
+			return nil, 0, false, err
 		}
-		out = append(out, summaryFromBuffer(buf, folder, validity))
+		byUID := make(map[imap.UID]Summary, len(summaries))
+		for _, summary := range summaries {
+			byUID[imap.UID(summary.Reference.UID)] = summary
+		}
+		for i := start; i < end; i++ {
+			if summary, ok := byUID[uids[i]]; ok {
+				out = append(out, summary)
+				if len(out) == limit {
+					return out, uids[i], i == len(uids)-1, nil
+				}
+			}
+		}
+	}
+	return out, 0, true, nil
+}
+
+func fetchSummaries(s *imapSession, folder string, validity uint32, uids []imap.UID) ([]Summary, error) {
+	out, err := fetchSearchSummaries(s, folder, validity, uids, "")
+	sort.Slice(out, func(i, j int) bool { return out[i].Reference.UID > out[j].Reference.UID })
+	return out, err
+}
+
+func fetchSearchSummaries(s *imapSession, folder string, validity uint32, uids []imap.UID, messageID string) ([]Summary, error) {
+	opts := &imap.FetchOptions{UID: true, Envelope: true, Flags: true, InternalDate: true, RFC822Size: true, ModSeq: s.modseq}
+	var part *imap.FetchItemBodySection
+	if messageID != "" {
+		part = &imap.FetchItemBodySection{Peek: true, Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"Message-ID"}, Partial: &imap.SectionPartial{Size: maxSearchIDHeaderBytes + 1}}
+		opts.BodySection = []*imap.FetchItemBodySection{part}
+	}
+	requested := imap.UIDSetNum(uids...)
+	cmd := s.client.Fetch(requested, opts)
+	fail := func(err error) ([]Summary, error) {
+		s.cleanup()
+		cmd.Close()
+		return nil, safeError(err)
+	}
+	out := make([]Summary, 0, len(uids))
+	seen := make(map[imap.UID]bool, len(uids))
+	for data := cmd.Next(); data != nil; data = cmd.Next() {
+		if len(seen) >= len(uids) {
+			return fail(ErrLimit)
+		}
+		buf := &imapclient.FetchMessageBuffer{}
+		gotHeader, exact := false, false
+		for item := data.Next(); item != nil; item = data.Next() {
+			switch v := item.(type) {
+			case imapclient.FetchItemDataUID:
+				if buf.UID != 0 {
+					return fail(ErrUnavailable)
+				}
+				buf.UID = v.UID
+			case imapclient.FetchItemDataEnvelope:
+				buf.Envelope = v.Envelope
+			case imapclient.FetchItemDataFlags:
+				buf.Flags = v.Flags
+			case imapclient.FetchItemDataRFC822Size:
+				buf.RFC822Size = v.Size
+			case imapclient.FetchItemDataInternalDate:
+				buf.InternalDate = v.Time
+			case imapclient.FetchItemDataModSeq:
+				buf.ModSeq = v.ModSeq
+			case imapclient.FetchItemDataBodySection:
+				if part == nil || !v.MatchCommand(part) {
+					// Next streams/discards unrequested literals; never Collect.
+					continue
+				}
+				if gotHeader || v.Literal == nil {
+					return fail(ErrUnavailable)
+				}
+				gotHeader = true
+				if v.Literal.Size() > maxSearchIDHeaderBytes {
+					return fail(ErrLimit)
+				}
+				raw, err := io.ReadAll(io.LimitReader(v.Literal, maxSearchIDHeaderBytes+1))
+				if err != nil {
+					return fail(err)
+				}
+				if int64(len(raw)) != v.Literal.Size() {
+					return fail(ErrUnavailable)
+				}
+				exact, err = exactSearchMessageID(raw, messageID)
+				if err != nil {
+					return fail(err)
+				}
+			}
+		}
+		if buf.UID == 0 || !requested.Contains(buf.UID) || seen[buf.UID] || part != nil && !gotHeader {
+			return fail(ErrUnavailable)
+		}
+		seen[buf.UID] = true
+		if part == nil || exact {
+			out = append(out, summaryFromBuffer(buf, folder, validity))
+		}
 	}
 	if err := cmd.Close(); err != nil {
 		return nil, safeError(err)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Reference.UID > out[j].Reference.UID })
+	// Missing UIDs are skipped: IMAP omits messages concurrently expunged after
+	// SEARCH. A returned message missing the requested header fails above.
 	return out, nil
 }
 func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {

@@ -23,7 +23,7 @@ func TestStatelessSDKPreservesPrincipalAndScopes(t *testing.T) {
 	var authorizedCalls atomic.Int32
 	mcp.AddTool[struct{}, map[string]any](server, &mcp.Tool{Name: "check_send_scope", Description: "Test verified identity propagation"}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
 		principal, ok := PrincipalFromContext(ctx)
-		if !ok || principal.Subject != "owner-123" || !HasScope(ctx, ScopeRead) {
+		if !ok || principal.Issuer != f.a.config.Issuer || principal.Resource != f.a.config.ResourceURL || principal.Subject != "owner-123" || !HasScope(ctx, ScopeRead) || PrincipalBinding(ctx) == "" {
 			t.Error("SDK dropped authenticated request context")
 			return nil, nil, ErrInvalidToken
 		}

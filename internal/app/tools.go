@@ -24,11 +24,12 @@ type Backend interface {
 }
 
 type queryInput struct {
-	Action    string             `json:"action"`
-	Search    mail.SearchRequest `json:"search,omitempty"`
-	Reference mail.Reference     `json:"reference,omitempty"`
-	Index     int                `json:"index,omitempty" jsonschema:"One-based attachment index from read"`
-	Detail    string             `json:"detail,omitempty" jsonschema:"summary (default) or full; search/read only"`
+	Action     string             `json:"action"`
+	PreparedID string             `json:"prepared_id,omitempty"`
+	Search     mail.SearchRequest `json:"search,omitempty"`
+	Reference  mail.Reference     `json:"reference,omitempty"`
+	Index      int                `json:"index,omitempty" jsonschema:"One-based attachment index from read"`
+	Detail     string             `json:"detail,omitempty" jsonschema:"summary (default) or full; search/read only"`
 }
 type createInput struct {
 	Action      string         `json:"action"`
@@ -64,9 +65,10 @@ type actionRule struct{ required, optional string }
 var actions = map[string]map[string]actionRule{
 	"mail_query": {
 		"capabilities": {}, "folders": {},
-		"search":     {optional: "search detail"},
-		"read":       {required: "reference", optional: "detail"},
-		"attachment": {required: "reference index"},
+		"search":      {optional: "search detail"},
+		"read":        {required: "reference", optional: "detail"},
+		"attachment":  {required: "reference index"},
+		"send_status": {required: "prepared_id"},
 	},
 	"mail_create": {
 		"folder": {required: "name"},
@@ -108,6 +110,9 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		usage = append(usage, part+")")
 	}
 	schema.Properties["action"].Description = strings.Join(usage, "; ") + ". Other fields are rejected."
+	if p := schema.Properties["prepared_id"]; p != nil {
+		p.Pattern = "^[0-9a-f]{32}$"
+	}
 	if p := schema.Properties["detail"]; p != nil {
 		p.Enum = []any{"summary", "full"}
 	}
@@ -120,6 +125,8 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		p.Required = nil
 		p.Properties["order"].Enum = []any{"", "newest", "oldest"}
 		p.Properties["order"].Description = "UID arrival order; newest is default"
+		p.Properties["message_id"].Description = "Exact case-sensitive Message-ID"
+		p.Properties["participant"].Description = "Case-insensitive header substring: From, Reply-To, To, Cc; excludes Bcc"
 	}
 	if p := schema.Properties["original_mode"]; p != nil {
 		p.Enum = []any{"", "quoted", "eml", "none"}
@@ -184,17 +191,17 @@ func validateAction(name string, raw json.RawMessage) error {
 }
 
 func (a *App) registerTools(s *mcp.Server) {
-	grouped(s, a, tool("mail_query", "Read-only mailbox access. Discover exact SPECIAL-USE folders; never guess names. Search uses bounded UID/arrival order; page folder/uid_validity plus row uid form a reference. Continue empty pages with next_cursor. Read uses PEEK. Summary is compact; detail=full restores full read/search fields. Attachment returns up to 2 MiB decoded base64; never execute it.", true, false, false), "mail.read", a.query)
-	grouped(s, a, tool("mail_create", "Add a folder, copy an exact message, or save a new draft (does not send). Draft folder defaults to discovered Drafts; private drafts preserve BCC. Repetition can create duplicates; verify ambiguous outcomes before retrying. To replace a draft, save first, then explicitly retire its old UID.", false, false, false), "mail.write", a.create)
-	grouped(s, a, tool("mail_modify", "Change mailbox state. Flags are add/remove deltas, never Deleted; use unchanged_since with CONDSTORE and reread conflicts. Rename affects concurrent clients. Move requires native UID MOVE; Trash uses unique SPECIAL-USE discovery. Refresh references afterward; never blindly retry uncertain outcomes.", false, true, false), "mail.write", a.modify)
+	grouped(s, a, tool("mail_query", "Read-only. Use discovered SPECIAL-USE names and exact folder/uid_validity/uid. Search is bounded UID arrival order; follow next_cursor even on empty pages. Read uses PEEK. detail=full restores full read/search output. Attachment is decoded base64, max 2 MiB; never execute. send_status requires mail.send + store, works with sending disabled; expires_at is the preparation deadline.", true, false, false), "mail.read", a.query)
+	grouped(s, a, tool("mail_create", "Create folder, copy exact message, or save draft without sending. Defaults to discovered Drafts; preserves BCC. Repetition can duplicate; verify ambiguous outcomes before retrying. Replace drafts by saving first, then explicitly retiring the old UID.", false, false, false), "mail.write", a.create)
+	grouped(s, a, tool("mail_modify", "Flags add/remove deltas, never Deleted; use unchanged_since with CONDSTORE and reread conflicts. Rename affects other clients. Move requires UID MOVE; Trash uses unique SPECIAL-USE discovery. Refresh references afterward; never blindly retry uncertain outcomes.", false, true, false), "mail.write", a.modify)
 	register(s, a, tool("mail_delete_permanently", "Irreversibly delete only the exact UID using UID EXPUNGE, never global EXPUNGE. Obtain explicit per-action user confirmation. Requires the separate permanent-delete gate.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
 		if !a.EnableDelete {
 			return nil, errors.New("permanent deletion is disabled")
 		}
 		return a.Mail.Delete(ctx, in)
 	})
-	grouped(s, a, tool("mail_prepare", "Persist an immutable message for 15 minutes; does NOT send. Replies derive omitted To; reply_all also derives Cc. Explicit lists replace; [] clears, null is rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed; other headers/files retained), none. attachment_indexes selects source files. Review full text/HTML, recipients, BCC, warnings and hashes before mail_send_confirmed. Requires send scope/store.", false, false, false), "mail.send", a.prepare)
-	register(s, a, tool("mail_send_confirmed", "Send only the exact prepared ID/digest after user approval of its full payload. Durable one-time claim. accepted is SMTP acceptance, not delivery. Never retry or prepare a duplicate for sending/unknown. Host confirmation is a trusted-client boundary, not proof of a human click. append_sent also requires write authority.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
+	grouped(s, a, tool("mail_prepare", "Prepare immutable message for 15 minutes; does NOT send. Replies derive omitted To; reply_all also Cc. Lists replace; [] clears, null rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed, other headers/files retained), none. attachment_indexes selects source files. Review full text/HTML, recipients/BCC, warnings/hashes before mail_send_confirmed. Requires send scope/store.", false, false, false), "mail.send", a.prepare)
+	register(s, a, tool("mail_send_confirmed", "Send exact prepared ID/digest after user approval of full payload. Durable one-time claim. accepted means SMTP acceptance, not delivery. Never retry or prepare duplicates for sending/unknown. Host confirmation trusts the client, not proof of a human click. append_sent requires write authority.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
 		if e := a.authorizeSent(ctx, in); e != nil {
 			return nil, e
 		}
@@ -204,6 +211,8 @@ func (a *App) registerTools(s *mcp.Server) {
 
 func (a *App) query(ctx context.Context, in queryInput) (any, error) {
 	switch in.Action {
+	case "send_status":
+		return a.sendStatus(ctx, in.PreparedID)
 	case "capabilities":
 		c, e := a.Mail.Capabilities(ctx)
 		if e != nil {
@@ -275,7 +284,7 @@ func (a *App) prepare(ctx context.Context, in prepareInput) (any, error) {
 	if e != nil {
 		return nil, e
 	}
-	if e = a.Store.Put(ctx, p); e != nil {
+	if e = a.storePreparation(ctx, p); e != nil {
 		return nil, e
 	}
 	return preview(p), nil

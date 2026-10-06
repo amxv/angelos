@@ -40,18 +40,18 @@ func TestClaimContract(t *testing.T) {
 	}))
 	defer s.Close()
 	redis := &Redis{endpoint: s.URL, token: "fixture-token", client: s.Client()}
-	_, claimed, e := redis.Claim(context.Background(), p.ID, p.Digest, time.Now())
+	_, claimed, e := redis.Claim(context.Background(), p.ID, p.Digest, strings.Repeat("c", 64), time.Now())
 	if e != nil || !claimed {
 		t.Fatal(e)
 	}
-	_, claimed, e = redis.Claim(context.Background(), p.ID, p.Digest, time.Now())
+	_, claimed, e = redis.Claim(context.Background(), p.ID, p.Digest, strings.Repeat("c", 64), time.Now())
 	if e != nil || claimed {
 		t.Fatal("duplicate claim allowed")
 	}
 }
 func TestInvalidIDNeverCallsStore(t *testing.T) {
 	r := &Redis{}
-	if _, _, e := r.Claim(context.Background(), "../bad", strings.Repeat("a", 64), time.Now()); e == nil {
+	if _, _, e := r.Claim(context.Background(), "../bad", strings.Repeat("a", 64), "", time.Now()); e == nil {
 		t.Fatal("invalid id")
 	}
 }

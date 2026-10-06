@@ -276,7 +276,7 @@ func (a *App) prepareSource(ctx context.Context, in prepareInput) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := a.Store.Put(ctx, prepared); err != nil {
+	if err := a.storePreparation(ctx, prepared); err != nil {
 		return nil, err
 	}
 	out := preview(prepared)

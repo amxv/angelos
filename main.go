@@ -43,15 +43,7 @@ func newHandler() http.Handler {
 				backend, e := mail.New(mailConfig)
 				if e == nil {
 					a := &app.App{Mail: backend, Config: mailConfig, EnableWrites: enabled("MAIL_ENABLE_WRITES"), EnableSend: enabled("MAIL_ENABLE_SEND"), EnableDelete: enabled("MAIL_ENABLE_DELETE"), AuthChallenge: gate.Challenge}
-					if a.EnableSend {
-						store, e := dispatch.NewRedis(os.Getenv("ANGELOS_REDIS_REST_URL"), os.Getenv("ANGELOS_REDIS_REST_TOKEN"))
-						if e == nil {
-							a.Store = store
-						} else {
-							a.EnableSend = false
-							log.Print("send disabled: durable store configuration is incomplete")
-						}
-					}
+					configureStore(a)
 					mcpHandler = gate.Middleware(a.Handler())
 					configured = true
 				}
@@ -72,6 +64,18 @@ func newHandler() http.Handler {
 		json.NewEncoder(w).Encode(map[string]any{"service": "angelos", "version": app.Version, "configured": configured})
 	})
 	return secureHeaders(mux)
+}
+
+// A configured receipt store remains readable after the operator disables sends.
+// Loading its configuration does not grant send authority or contact Redis.
+func configureStore(a *app.App) {
+	store, err := dispatch.NewRedis(os.Getenv("ANGELOS_REDIS_REST_URL"), os.Getenv("ANGELOS_REDIS_REST_TOKEN"))
+	if err == nil {
+		a.Store = store
+	} else if a.EnableSend {
+		a.EnableSend = false
+		log.Print("send disabled: durable store configuration is incomplete")
+	}
 }
 func secureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

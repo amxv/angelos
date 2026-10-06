@@ -70,9 +70,13 @@ func testConfig() Config {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureWithConfig(t, testConfig())
+}
+
+func newFixtureWithConfig(t *testing.T, c Config) *fixture {
+	t.Helper()
 	f := &fixture{now: time.Unix(1800000000, 0), status: http.StatusOK, key: rsaKey(t)}
 	f.body = string(jsonBytes(t, map[string]any{"keys": []any{publicRSA(f.key, "key-1")}}))
-	c := testConfig()
 	c.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		f.requests.Add(1)
 		if r.URL.String() != c.JWKSURL || r.Method != http.MethodGet {
@@ -141,7 +145,7 @@ func TestValidRSAAndPrincipal(t *testing.T) {
 	f.a.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		p, ok := PrincipalFromContext(r.Context())
-		if !ok || p.Subject != "owner-123" || len(p.Scopes) != 3 {
+		if !ok || p.Issuer != f.a.config.Issuer || p.Resource != f.a.config.ResourceURL || p.Subject != "owner-123" || len(p.Scopes) != 3 {
 			t.Fatalf("unexpected principal: %#v, %v", p, ok)
 		}
 		p.Scopes[0] = "attacker.scope"

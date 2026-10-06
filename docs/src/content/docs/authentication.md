@@ -41,7 +41,13 @@ The issuer must publish discovery metadata and issue access tokens for the exact
 
 Opaque tokens, ID tokens without the required resource audience/scopes, symmetric JWTs, and other algorithms are unsupported. An email address is not substituted for the OAuth subject.
 
-Additional operations require `mail.write` or `mail.send` as well as their server-side feature switches. Granting a scope does not enable a disabled operation.
+Additional operations require `mail.write` or `mail.send` as well as their server-side feature switches. Granting a scope does not enable a disabled mutation or dispatch. The read-only `mail_query` action `send_status` also requires `mail.send`, but remains available with a configured store when sending is disabled.
+
+## Preparation ownership
+
+Version 0.4 binds each new prepared-send record to an opaque hash of the verified issuer, resource URL, and subject. No bearer token is stored in that binding. Status inspection and claiming a new owned preparation require the same identity; a refreshed token or changed scopes retain the binding. Multiple allowlisted subjects still share the configured mailbox, but cannot enumerate or claim one another's new send preparations.
+
+Changing issuer, resource, or subject intentionally prevents access to older owned preparations in that namespace. Older unowned records are not retroactively assigned to a user: read-only status returns `unavailable`, while the previous exact-ID/digest send behavior remains until those records expire. Missing status must not be interpreted as permission to resend.
 
 ## Connect ChatGPT
 

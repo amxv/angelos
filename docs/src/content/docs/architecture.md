@@ -8,7 +8,7 @@ category: Concepts
 
 # Architecture
 
-Angelos has a small, account-specific server boundary. A deployment has one configured mailbox and an explicit list of OAuth subjects allowed to access it. Multiple allowed subjects share that same mailbox; they are not separate tenants.
+Angelos has a small, account-specific server boundary. A deployment has one configured mailbox and an explicit list of OAuth subjects allowed to access it. Multiple allowed subjects share that same mailbox; they are not separate mailbox tenants. New prepared-send records and receipt lookups are nevertheless isolated by verified OAuth issuer/resource/subject.
 
 ## Request path
 
@@ -28,7 +28,7 @@ The official Go MCP SDK handles stateless Streamable HTTP with JSON responses. A
 | `internal/config` | Administrator-configured mailbox credentials and TLS endpoints |
 | `internal/mail` | IMAP reads and guarded mutations, MIME parsing, and SMTP transport |
 | `internal/compose` | Validated recipient envelope, MIME construction, and immutable content digest |
-| `internal/dispatch` | Durable preparation, atomic send claim, and outcome recording |
+| `internal/dispatch` | Owner-bound preparation, atomic send claim, outcome recording, and read-only receipt projection |
 | `internal/app` | MCP tool names, schemas, annotations, and operation boundaries |
 
 The root Go service is independent of the static `docs/` workspace. Documentation builds need no mailbox access.
@@ -40,7 +40,7 @@ The root Go service is independent of the static `docs/` workspace. Documentatio
 - Public issuer signing keys have a bounded in-memory cache.
 - Prepared sends and dispatch records live in an optional external Redis REST store.
 
-Sending is disabled without that store. Mailbox reads and ordinary mailbox writes do not require it. A function instance's memory is never used as the sole duplicate-send guard.
+Sending is disabled without that store. A configured store can still serve authorized read-only receipts while sending is disabled. Mailbox reads and ordinary mailbox writes do not require it. A function instance's memory is never used as the sole duplicate-send guard.
 
 ## Deliberate boundaries
 

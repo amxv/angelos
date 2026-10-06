@@ -130,10 +130,10 @@ func (a *Authenticator) verify(ctx context.Context, token string) (Principal, er
 	if expires <= a.now().Unix() {
 		return Principal{}, ErrInvalidToken
 	}
-	p := Principal{Subject: subject, Scopes: strings.Fields(scope)}
-	for _, granted := range p.Scopes {
+	scopes := strings.Fields(scope)
+	for _, granted := range scopes {
 		if granted == ScopeRead {
-			return p, nil
+			return Principal{Issuer: issuer, Resource: a.config.ResourceURL, Subject: subject, Scopes: scopes}, nil
 		}
 	}
 	return Principal{}, ErrInsufficientScope

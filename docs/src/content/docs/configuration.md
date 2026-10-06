@@ -58,12 +58,12 @@ The current mail login uses a username/password. A provider that requires OAuth 
 | `MAIL_ENABLE_WRITES` | Disabled | Allows mailbox mutations when the token also has `mail.write` |
 | `MAIL_ENABLE_SEND` | Disabled | Allows preparation and sending when the token has `mail.send` and a durable store is configured |
 | `MAIL_ENABLE_DELETE` | Disabled | Additional gate for permanent single-message deletion; ordinary writes must also be enabled |
-| `ANGELOS_REDIS_REST_URL` | Unset | HTTPS endpoint for a Redis-compatible REST command service |
+| `ANGELOS_REDIS_REST_URL` | Unset | HTTPS endpoint for preparation/dispatch and read-only receipt lookup |
 | `ANGELOS_REDIS_REST_TOKEN` | Unset | Secret used to authenticate durable-store requests |
 
 Set an enable flag to `1` to opt in. A scoped token does not override a disabled gate. The Redis endpoint must support the command API used by the store, including `SET` and atomic Lua `EVAL`; a raw Redis TCP URL is unsupported.
 
-The store contains private prepared mail for up to 15 minutes and minimal dispatch records for seven days. Review [data handling](/docs/safety) before configuring a third-party store.
+A valid configured store remains available for owner-scoped receipt reads when `MAIL_ENABLE_SEND=0`; this does not enable preparation or SMTP submission. The store contains private prepared mail for up to 15 minutes and minimal dispatch records for seven days. Review [data handling](/docs/safety) before configuring a third-party store.
 
 ## Startup status
 

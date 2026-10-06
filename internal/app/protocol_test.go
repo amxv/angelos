@@ -34,7 +34,7 @@ func TestActualToolRegistryAndAnnotations(t *testing.T) {
 		read, destructive, open bool
 		actions                 []string
 	}{
-		"mail_query":              {"mail.read", true, false, false, []string{"attachment", "capabilities", "folders", "read", "search"}},
+		"mail_query":              {"mail.read", true, false, false, []string{"attachment", "capabilities", "folders", "read", "search", "send_status"}},
 		"mail_create":             {"mail.write", false, false, false, []string{"copy", "draft", "folder"}},
 		"mail_modify":             {"mail.write", false, true, false, []string{"flags", "move", "rename", "trash"}},
 		"mail_delete_permanently": {"mail.write", false, true, false, nil},

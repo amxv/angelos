@@ -36,3 +36,21 @@ func TestEnableFlagsExact(t *testing.T) {
 		t.Fatal("1 should enable")
 	}
 }
+
+func TestConfigureStoreIndependentOfSendEnablement(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, valid := range []bool{false, true} {
+			t.Setenv("ANGELOS_REDIS_REST_URL", "")
+			t.Setenv("ANGELOS_REDIS_REST_TOKEN", "")
+			if valid {
+				t.Setenv("ANGELOS_REDIS_REST_URL", "https://redis.example.com")
+				t.Setenv("ANGELOS_REDIS_REST_TOKEN", "fixture-token")
+			}
+			a := &app.App{EnableSend: enabled}
+			configureStore(a)
+			if (a.Store != nil) != valid || a.EnableSend != (enabled && valid) {
+				t.Fatalf("enabled=%t valid=%t: store=%t send=%t", enabled, valid, a.Store != nil, a.EnableSend)
+			}
+		}
+	}
+}

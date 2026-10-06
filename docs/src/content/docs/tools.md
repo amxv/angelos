@@ -14,11 +14,11 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.3.0 exposes six tools for all 17 original operations plus reply-all. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
+Angelos 0.4.0 exposes six tools for all 17 original operations plus reply-all and read-only send-status inspection. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
-| `mail_query` | None | Read-only, closed-world |
+| `mail_query` | None, except `send_status` also requires `mail.send` | Read-only, closed-world |
 | `mail_create` | `mail.write` | Non-destructive, closed-world |
 | `mail_modify` | `mail.write` | Destructive, closed-world |
 | `mail_delete_permanently` | `mail.write` | Destructive, closed-world; separate irreversible-delete gate |
@@ -38,6 +38,7 @@ Call `mail_query` with one of these actions:
 | `search` | Optional `search` object below, `detail` | Message summaries, UIDVALIDITY, scan size, optional next cursor |
 | `read` | `reference`, optional `detail` | Text, selected headers, flags, attachment metadata, truncation warnings |
 | `attachment` | `reference`, one-based `index` | Attachment metadata and complete base64-encoded bytes |
+| `send_status` | `prepared_id` | Your minimal durable send receipt; never sends or claims |
 
 `detail` accepts `summary` (default) or `full` for search/read only. Full mode returns every field in the original read/search response. Capability, folder, attachment, mutation, preparation, and dispatch results retain their previous full shapes.
 
@@ -57,7 +58,7 @@ The numbers above are illustrative. A stale UIDVALIDITY or a missing message req
 
 ### Search
 
-The nested `search.folder` defaults to `INBOX`; an omitted `search` performs the default search. `query` is a plain IMAP text-search term, not a Gmail query language or arbitrary IMAP command. Optional `from`, `to`, and `subject` fields add header filters. `since` and `before` use `YYYY-MM-DD` IMAP internal-date boundaries; `since` is inclusive and `before` is exclusive. Optional `unread` and `flagged` booleans filter those flags. Supplied filters are combined.
+The nested `search.folder` defaults to `INBOX`; an omitted `search` performs the default search. `query` is a plain IMAP text-search term, not a Gmail query language or arbitrary IMAP command. Optional `from`, `to`, and `subject` fields add header filters. `participant` is IMAP case-insensitive substring matching across From, Reply-To, To, or Cc (not Bcc). `message_id` is an exact case-sensitive complete Message-ID filter, verified against the original header rather than trusting IMAP substring search. `since` and `before` use `YYYY-MM-DD` IMAP internal-date boundaries; `since` is inclusive and `before` is exclusive. Optional `unread` and `flagged` booleans filter those flags. Supplied filters are combined.
 
 ```json
 {
@@ -77,6 +78,21 @@ The nested `search.folder` defaults to `INBOX`; an omitted `search` performs the
 
 Keep requesting with the returned `next_cursor`, the same filters, and the same order until the cursor is absent. An empty result page may still have a cursor. Pagination keeps the initial upper UID bound, so newly arriving messages require a new search. Changing a filter or order also requires starting a new search.
 
+Exact-ID inputs accept modern ASCII dot-atom IDs or no-fold domain literals, with optional angle brackets and outer spaces. Obsolete quoted forms and input comments are rejected. Comments and folded whitespace around a single valid source ID are allowed, but duplicate fields, multiple IDs, case differences, and prefix/suffix collisions do not match. Candidate verification uses PEEK on only the Message-ID header, in batches of at most 16 UIDs, with a 64 KiB complete selected-header limit. Missing UIDs after a search are skipped as concurrent expunges; incomplete returned headers fail safely. False candidates do not consume the requested result quota. The same bounded UID scan and empty-page continuation rules still apply.
+
+```json
+{
+  "action": "search",
+  "search": {
+    "folder": "INBOX",
+    "message_id": "<ExactCaseID@Example.com>",
+    "participant": "person@example.com"
+  }
+}
+```
+
+These filters combine with each other and earlier criteria by AND. Participant search may match display names or a substring of an address; it is not an exact-address operator. Message-ID case is never normalized.
+
 ### Compact results
 
 Summary search pages hoist `folder` and `uid_validity` once to the page. Each message has `uid`, subject, addresses when present, date, flags, size, and MODSEQ when available. Construct a reference from the page's folder/UIDVALIDITY plus the row's UID. If a row contains an explicit `reference`, use it instead. `next_cursor`, `scanned_uids`, and `order` keep the same meaning. Empty address lists are omitted. Full mode restores the original per-message `reference` shape and empty fields.
@@ -90,6 +106,27 @@ Exact references, flags/MODSEQ, Reply-To and other selected headers, attachment 
 Reads inspect up to a 5 MiB raw-message prefix and return at most 256 KiB of text. MIME parsing is bounded to 12 nested levels and 100 parts. Plain-text alternatives are preferred; HTML-only mail uses text extraction with a warning. Extraction reads at most 1 MiB of HTML, with a 64 KiB token limit, 20,000-token limit, and 128-level stack limit. It does not render content or fetch resources. Truncation can make attachment metadata incomplete.
 
 Attachment retrieval uses the one-based index from `mail_query` action `read`, rereads the referenced message, and returns at most 2 MiB of transfer-decoded attachment bytes. The complete enclosing message must fit the 5 MiB read limit. Text-file attachments retain their original bytes and character encoding; charset conversion applies only to displayed message text. An explicitly attached multipart container is one attachment, and its children are excluded from displayed text and inline forwards. Unsupported transfer encodings or decoding failures return an error instead of a successful partial or undecoded download. Bytes are returned as base64; the server does not open or execute files or fetch attachment URLs.
+
+### Inspect a send receipt without sending
+
+```json
+{
+  "action": "send_status",
+  "prepared_id": "0123456789abcdef0123456789abcdef"
+}
+```
+
+Use `mail_query` for this operation, never the dispatch tool as a status probe. It requires `mail.read`, `mail.send`, and a configured durable store. It remains available when `MAIL_ENABLE_SEND=0`; it does not claim an ID, invoke SMTP, append Sent mail, alter a record, or refresh its retention.
+
+The minimal result contains `status`, optional `message_id`, an internal `stage` where known, original preparation `expires_at`, and a warning. It never returns the body, HTML, recipients/BCC, approval digest, owner binding, or credentials. `expires_at` is the original 15-minute approval deadline, not the receipt's retention deadline.
+
+- `prepared` is a snapshot of an unclaimed preparation; it is not permission to send.
+- `sending` or `unknown` must never cause an automatic retry or duplicate preparation.
+- `accepted` means SMTP acceptance only, never verified delivery.
+- `rejected` records a rejected attempt; any new message still needs its own review.
+- `expired` or `unavailable` is not proof that no message was sent. Retained consumed markers can outlive the preparation deadline for seven days.
+
+New preparations and status lookups are bound to the verified OAuth issuer, resource, and subject. Foreign IDs, missing records, and older unowned receipts all return the same `unavailable` result. Refreshing a token or changing its scopes does not change ownership; changing the issuer/resource/subject does. Legacy unowned records keep their earlier exact-ID/digest send/replay behavior until their existing expiry, but the new status lookup cannot claim an owner for them. No migration or owner adoption occurs.
 
 ## Mailbox writes
 

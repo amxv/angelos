@@ -2,6 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -18,8 +21,10 @@ var (
 
 // Principal contains verified identity and scopes, never the bearer token.
 type Principal struct {
-	Subject string
-	Scopes  []string
+	Issuer   string
+	Resource string
+	Subject  string
+	Scopes   []string
 }
 
 type principalKey struct{}
@@ -29,6 +34,26 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	p, ok := ctx.Value(principalKey{}).(Principal)
 	p.Scopes = append([]string(nil), p.Scopes...)
 	return p, ok
+}
+
+// PrincipalBinding returns a stable, opaque owner identifier for the verified
+// issuer, resource, and subject, or "" when the context has no verified principal.
+// Scopes and token lifetimes are deliberately excluded so refreshed tokens retain
+// ownership. The versioned, length-prefixed encoding prevents tuple ambiguity.
+func PrincipalBinding(ctx context.Context) string {
+	p, ok := ctx.Value(principalKey{}).(Principal)
+	if !ok {
+		return ""
+	}
+	h := sha256.New()
+	h.Write([]byte("angelos/principal-binding/v1\x00"))
+	var size [8]byte
+	for _, field := range []string{p.Issuer, p.Resource, p.Subject} {
+		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+		h.Write(size[:])
+		h.Write([]byte(field))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func HasScope(ctx context.Context, scope string) bool {

@@ -59,3 +59,10 @@ The dispatching process holds the claimed payload long enough to attempt SMTP an
 The server does not provide an encrypted-at-rest application layer for these records. Use the provider's access controls, TLS, retention controls, and encryption appropriate to your data. Keep Redis credentials restricted to the API deployment.
 
 Avoid logging credentials, tokens, MIME payloads, complete tool arguments, and private message bodies. Publishing this documentation does not require any of those values.
+
+
+## Safe receipt inspection
+
+Use `mail_query` action `send_status` to inspect a preparation or consumed send ID. It never calls Claim/SMTP, changes state, or extends retention. The minimal projection excludes the message, recipients, BCC, digest and ownership identifier. New records preserve an opaque verified-principal binding through claim and completion; foreign and legacy-unowned records are indistinguishable from unavailable ones.
+
+Status is an observation, not authorization or a retry decision. SMTP acceptance is not delivery, and missing/expired status is not proof of nonsend. Keep the unknown-outcome safeguards even when no receipt can be returned.

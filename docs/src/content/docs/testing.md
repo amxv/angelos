@@ -35,6 +35,8 @@ go test ./internal/mail -run '^$' -fuzz FuzzParseMessageAttachment -fuzztime=30s
 
 Natural-composition fixtures also exercise TLS IMAP reads through signed OAuth/MCP calls, source headers longer than compact read output, reply-all routing and aliases, exact Message-ID case, text/HTML alternatives, byte-accurate EML and selected attachments, privacy, explicit-null rejection, and preparation without SMTP dispatch.
 
+Status/search regressions cover signed OAuth principal isolation and challenges, read-only lookup with sending disabled, strict receipt projection, unchanged send retention, actual Redis GET-only status scripts and concurrent claims, exact-ID header verification and quotas, participant OR/AND semantics, sparse cursors, and no Seen mutation. Redis script/TTL tests require the configured ephemeral loopback fixture and are included in CI.
+
 ## Documentation checks
 
 Run the required commands serially:

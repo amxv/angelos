@@ -131,13 +131,16 @@ type integrationStore struct {
 	claims   int
 }
 
-func (s *integrationStore) Put(_ context.Context, p compose.Prepared) error {
+func (s *integrationStore) Put(_ context.Context, p compose.Prepared, owner string) error {
 	s.messages = append(s.messages, p)
 	return nil
 }
-func (s *integrationStore) Claim(context.Context, string, string, time.Time) (dispatch.Record, bool, error) {
+func (s *integrationStore) Claim(context.Context, string, string, string, time.Time) (dispatch.Record, bool, error) {
 	s.claims++
 	return dispatch.Record{}, false, errors.New("fixture must not send")
+}
+func (s *integrationStore) Status(context.Context, string, string, time.Time) (dispatch.SendStatus, error) {
+	return dispatch.SendStatus{}, errors.New("fixture must not inspect status")
 }
 func (s *integrationStore) Complete(context.Context, string, string, string) error {
 	return errors.New("fixture must not send")
