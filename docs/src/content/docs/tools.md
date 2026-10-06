@@ -8,19 +8,38 @@ category: Reference
 
 # Tool reference
 
-All tools require a valid owner token with `mail.read`. Write and send tools additionally require their scopes and deployment gates. Tools can appear in discovery while their execution is disabled; use `mail_capabilities` to inspect the gates and the provider's supported features.
+All tools require a valid owner token with `mail.read`. Write and send tools additionally require their scopes and deployment gates. Tools can appear in discovery while their execution is disabled; use `mail_query` with `action: "capabilities"` to inspect the gates and the provider's supported features.
 
 Mail text, headers, filenames, and attachment data are untrusted. See [Safety and concurrency](/docs/safety).
 
-## Read tools
+## Six tools, grouped by permission and risk
 
-| Tool | Arguments | Result |
+Angelos 0.2.0 exposes six tools for the same 17 operations. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access. There is no arbitrary command input.
+
+| Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
-| `mail_capabilities` | None | IMAP capabilities, discovered special folders, and deployment gates |
-| `mail_list_folders` | None | Exact folder names, hierarchy delimiters, and attributes |
-| `mail_search` | Search fields below | Message summaries, UIDVALIDITY, scan size, and optional next cursor |
-| `mail_read` | Message reference | Plain text, selected headers, flags, attachment metadata, and truncation warnings |
-| `mail_get_attachment` | `reference`, one-based `index` | Attachment metadata and base64-encoded bytes |
+| `mail_query` | None | Read-only, closed-world |
+| `mail_create` | `mail.write` | Non-destructive, closed-world |
+| `mail_modify` | `mail.write` | Destructive, closed-world |
+| `mail_delete_permanently` | `mail.write` | Destructive, closed-world; separate irreversible-delete gate |
+| `mail_prepare` | `mail.send` | Non-destructive, closed-world; no SMTP submission |
+| `mail_send_confirmed` | `mail.send` | Destructive, open-world; actual SMTP submission |
+
+The tool-level consent boundaries are deliberately separate. None promises idempotency through its MCP annotation. See [Migration and token budget](/docs/tool-migration) for the complete old-to-new mapping and measured size changes.
+
+## Read operations
+
+Call `mail_query` with one of these actions:
+
+| Action | Arguments beyond `action` | Result |
+| --- | --- | --- |
+| `capabilities` | None | IMAP capabilities, discovered special folders, deployment gates |
+| `folders` | None | Exact folder names, hierarchy delimiters, attributes |
+| `search` | Optional `search` object below, `detail` | Message summaries, UIDVALIDITY, scan size, optional next cursor |
+| `read` | `reference`, optional `detail` | Text, selected headers, flags, attachment metadata, truncation warnings |
+| `attachment` | `reference`, one-based `index` | Attachment metadata and complete base64-encoded bytes |
+
+`detail` accepts `summary` (default) or `full` for search/read only. Full mode returns every field in the original read/search response. Capability, folder, attachment, mutation, preparation, and dispatch results retain their previous full shapes.
 
 ### Message identity
 
@@ -38,16 +57,19 @@ The numbers above are illustrative. A stale UIDVALIDITY or a missing message req
 
 ### Search
 
-`folder` defaults to `INBOX`. `query` is a plain IMAP text-search term, not a Gmail query language or arbitrary IMAP command. Optional `from`, `to`, and `subject` fields add header filters. `since` and `before` use `YYYY-MM-DD` IMAP internal-date boundaries; `since` is inclusive and `before` is exclusive. Optional `unread` and `flagged` booleans filter those flags. Supplied filters are combined.
+The nested `search.folder` defaults to `INBOX`; an omitted `search` performs the default search. `query` is a plain IMAP text-search term, not a Gmail query language or arbitrary IMAP command. Optional `from`, `to`, and `subject` fields add header filters. `since` and `before` use `YYYY-MM-DD` IMAP internal-date boundaries; `since` is inclusive and `before` is exclusive. Optional `unread` and `flagged` booleans filter those flags. Supplied filters are combined.
 
 ```json
 {
-  "folder": "INBOX",
-  "query": "invoice",
-  "from": "billing@example.com",
-  "since": "2026-01-01",
-  "unread": true,
-  "limit": 25
+  "action": "search",
+  "search": {
+    "folder": "INBOX",
+    "query": "invoice",
+    "from": "billing@example.com",
+    "since": "2026-01-01",
+    "unread": true,
+    "limit": 25
+  }
 }
 ```
 
@@ -55,26 +77,34 @@ The numbers above are illustrative. A stale UIDVALIDITY or a missing message req
 
 Keep requesting with the returned `next_cursor`, the same filters, and the same order until the cursor is absent. An empty result page may still have a cursor. Pagination keeps the initial upper UID bound, so newly arriving messages require a new search. Changing a filter or order also requires starting a new search.
 
+### Compact results
+
+Summary search pages hoist `folder` and `uid_validity` once to the page. Each message has `uid`, subject, addresses when present, date, flags, size, and MODSEQ when available. Construct a reference from the page's folder/UIDVALIDITY plus the row's UID. If a row contains an explicit `reference`, use it instead. `next_cursor`, `scanned_uids`, and `order` keep the same meaning. Empty address lists are omitted. Full mode restores the original per-message `reference` shape and empty fields.
+
+Summary reads return at most 4096 UTF-8 text bytes without splitting a character. If clipped, `text_clipped: true`, `text_bytes`, and `full_text_hint` explicitly direct the client to repeat the same read with `detail: "full"`. This presentation clipping is separate from `truncated`, which still reports incomplete MIME/backend data. Full mode restores all available text within the read limits below. An unclipped summary never claims a truncated source is complete.
+
+Exact references, flags/MODSEQ, Reply-To and other selected headers, attachment indexes, warnings, and backend truncation state are retained. Empty headers, attachments, and address lists may be omitted in summary mode. Preparation previews are always full and are never shortened; their To/Cc/Bcc arrays, complete text, and attachment hashes remain mandatory review material.
+
 ### Read limits
 
 Reads inspect up to a 5 MiB raw-message prefix and return at most 256 KiB of text. MIME parsing is bounded to 12 nested levels and 100 parts. Plain-text alternatives are preferred; HTML-only mail uses text extraction with a warning. Extraction reads at most 1 MiB of HTML, with a 64 KiB token limit, 20,000-token limit, and 128-level stack limit. It does not render content or fetch resources. Truncation can make attachment metadata incomplete.
 
-Attachment retrieval uses the one-based index from `mail_read`, rereads the referenced message, and returns at most 2 MiB of decoded attachment bytes. The complete enclosing message must fit the 5 MiB read limit. Bytes are returned as base64; the server does not open or execute files or fetch attachment URLs.
+Attachment retrieval uses the one-based index from `mail_query` action `read`, rereads the referenced message, and returns at most 2 MiB of decoded attachment bytes. The complete enclosing message must fit the 5 MiB read limit. Bytes are returned as base64; the server does not open or execute files or fetch attachment URLs.
 
 ## Mailbox writes
 
 These tools require `mail.write` and `MAIL_ENABLE_WRITES=1`.
 
-| Tool | Arguments | Behavior |
+| Tool / action | Arguments beyond `action` | Behavior |
 | --- | --- | --- |
-| `mail_set_flags` | `reference`, `operation`, `flags`, optional `unchanged_since` | Add or remove selected flags |
-| `mail_create_folder` | `name` | Create a folder |
-| `mail_rename_folder` | `old`, `new` | Rename a folder; INBOX rename is excluded |
-| `mail_copy` | `reference`, `destination` | Copy one message into an existing folder |
-| `mail_move` | `reference`, `destination` | Move one message using native UID MOVE |
-| `mail_trash` | Message reference | Move into the uniquely advertised Trash folder |
-| `mail_save_draft` | `message`, optional `folder` | Append a new composed draft |
-| `mail_delete_permanently` | Message reference | Permanently remove exactly one UID, with an additional delete gate |
+| `mail_create` / `folder` | `name` | Create a folder |
+| `mail_create` / `copy` | `reference`, `destination` | Copy one message into an existing folder |
+| `mail_create` / `draft` | `message`, optional `folder` | Append a new composed draft |
+| `mail_modify` / `flags` | `reference`, `operation`, `flags`, optional `unchanged_since` | Add or remove selected flags |
+| `mail_modify` / `rename` | `old`, `new` | Rename a folder; INBOX rename is excluded |
+| `mail_modify` / `move` | `reference`, `destination` | Move one message using native UID MOVE |
+| `mail_modify` / `trash` | `reference` | Move into the uniquely advertised Trash folder |
+| `mail_delete_permanently` (no action) | Message reference fields directly | Permanently remove exactly one UID, with an additional delete gate |
 
 Flag operations accept `add` or `remove`, with `\Seen`, `\Answered`, `\Flagged`, `\Draft`, and permitted conservative ASCII keywords. They never replace the complete flag set or expose `\Deleted`/`\Recent` as ordinary flags. The mailbox must permit each requested flag.
 
@@ -90,14 +120,16 @@ Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-actio
 
 All preparation and send tools require `mail.send`, `MAIL_ENABLE_SEND=1`, and the durable Redis REST store.
 
-| Tool | Arguments | Behavior |
+| Tool / action | Arguments beyond `action` | Behavior |
 | --- | --- | --- |
-| `mail_prepare_send` | Composition fields | Persist an immutable message and return its review payload |
-| `mail_prepare_reply` | `reference`, `message` | Prepare a reply with threading headers from the source |
-| `mail_prepare_forward` | `reference`, `message` | Prepare an inline plain-text forward |
-| `mail_send_confirmed` | `prepared_id`, `confirmed_digest`, `append_sent` | Claim once and send the exact prepared bytes |
+| `mail_prepare` / `new` | `message` | Persist an immutable message and return its review payload |
+| `mail_prepare` / `reply` | `reference`, `message` | Prepare a reply with threading headers from the source |
+| `mail_prepare` / `forward` | `reference`, `message` | Prepare an inline plain-text forward |
+| `mail_send_confirmed` (no action) | `prepared_id`, `confirmed_digest`, `append_sent` | Claim once and send the exact prepared bytes |
 
 ### Composition shape
+
+Place these fields inside `message` for all preparation actions and draft saving.
 
 ```json
 {

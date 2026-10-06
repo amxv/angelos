@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/amxv/angelos/internal/app"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,7 +20,7 @@ func TestMissingConfigFailsClosed(t *testing.T) {
 	}
 	r = httptest.NewRecorder()
 	h.ServeHTTP(r, httptest.NewRequest("GET", "https://example.com/healthz", nil))
-	if r.Code != 200 || !strings.Contains(r.Body.String(), `"configured":false`) {
+	if r.Code != 200 || (!strings.Contains(r.Body.String(), `"configured":false`) || !strings.Contains(r.Body.String(), `"version":"`+app.Version+`"`)) {
 		t.Fatal(r.Body.String())
 	}
 }

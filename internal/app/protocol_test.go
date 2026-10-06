@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"testing"
 )
 
@@ -25,37 +27,87 @@ func callProtocol(t *testing.T, a *App, payload string) map[string]any {
 	return out
 }
 func TestActualToolRegistryAndAnnotations(t *testing.T) {
-	a := &App{}
-	out := callProtocol(t, a, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
-	r, ok := out["result"].(map[string]any)
-	if !ok {
-		t.Fatal(out)
+	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
+	listed := out["result"].(map[string]any)["tools"].([]any)
+	expected := map[string]struct {
+		scope                   string
+		read, destructive, open bool
+		actions                 []string
+	}{
+		"mail_query":              {"mail.read", true, false, false, []string{"attachment", "capabilities", "folders", "read", "search"}},
+		"mail_create":             {"mail.write", false, false, false, []string{"copy", "draft", "folder"}},
+		"mail_modify":             {"mail.write", false, true, false, []string{"flags", "move", "rename", "trash"}},
+		"mail_delete_permanently": {"mail.write", false, true, false, nil},
+		"mail_prepare":            {"mail.send", false, false, false, []string{"forward", "new", "reply"}},
+		"mail_send_confirmed":     {"mail.send", false, true, true, nil},
 	}
-	tools, ok := r["tools"].([]any)
-	if !ok || len(tools) != 17 {
-		t.Fatalf("tool count: %v", r)
+	if len(listed) != len(expected) {
+		t.Fatalf("got %d tools, want %d", len(listed), len(expected))
 	}
-	seen := map[string]bool{}
-	for _, v := range tools {
-		x := v.(map[string]any)
-		name := x["name"].(string)
-		if seen[name] {
-			t.Fatal("duplicate tool", name)
+	for _, v := range listed {
+		tool := v.(map[string]any)
+		name := tool["name"].(string)
+		want, ok := expected[name]
+		if !ok {
+			t.Fatal("unexpected tool", name)
 		}
-		seen[name] = true
-		ann := x["annotations"].(map[string]any)
-		if name == "mail_send_confirmed" {
-			if ann["readOnlyHint"] != false || ann["destructiveHint"] != true || ann["openWorldHint"] != true {
-				t.Fatal(ann)
+		delete(expected, name)
+		ann := tool["annotations"].(map[string]any)
+		if ann["readOnlyHint"] != want.read || ann["destructiveHint"] != want.destructive || ann["openWorldHint"] != want.open || ann["idempotentHint"] != false {
+			t.Fatal(name, ann)
+		}
+		scheme := tool["_meta"].(map[string]any)["securitySchemes"].([]any)[0].(map[string]any)
+		scopes := []any{"mail.read"}
+		if want.scope != "mail.read" {
+			scopes = append(scopes, want.scope)
+		}
+		if !reflect.DeepEqual(scheme["scopes"], scopes) {
+			t.Fatal(name, scheme)
+		}
+		schema := tool["inputSchema"].(map[string]any)
+		if schema["additionalProperties"] != false {
+			t.Fatal(name, "allows unknown properties")
+		}
+		if want.actions != nil {
+			enum := schema["properties"].(map[string]any)["action"].(map[string]any)["enum"].([]any)
+			var got []string
+			for _, v := range enum {
+				got = append(got, v.(string))
+			}
+			if !reflect.DeepEqual(got, want.actions) {
+				t.Fatal(name, got)
 			}
 		}
-		if name == "mail_read" && ann["readOnlyHint"] != true {
-			t.Fatal(ann)
+	}
+}
+
+func TestToolSchemaTokenBudget(t *testing.T) {
+	baseline, e := os.ReadFile("testdata/tools-list-v0.1.0.json")
+	if e != nil {
+		t.Fatal(e)
+	}
+	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
+	current, e := json.Marshal(out["result"].(map[string]any)["tools"])
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(current)*100 > len(baseline)*65 {
+		t.Fatalf("discovery exceeds 65%% baseline budget: %d / %d", len(current), len(baseline))
+	}
+	countSchemas := func(raw []byte) (int, int) {
+		var ts []map[string]json.RawMessage
+		if e := json.Unmarshal(raw, &ts); e != nil {
+			t.Fatal(e)
 		}
+		n := 0
+		for _, tool := range ts {
+			n += len(tool["inputSchema"])
+		}
+		return len(ts), n
 	}
-	if !seen["mail_get_attachment"] || !seen["mail_save_draft"] {
-		t.Fatal(seen)
-	}
+	oldCount, oldSchemas := countSchemas(baseline)
+	newCount, newSchemas := countSchemas(current)
+	t.Logf("tools: %d -> %d; tools/list tools array UTF-8 JSON bytes: %d -> %d; inputSchema bytes: %d -> %d; approximate tokens ceil(bytes/4), not a tokenizer: %d -> %d", oldCount, newCount, len(baseline), len(current), oldSchemas, newSchemas, (len(baseline)+3)/4, (len(current)+3)/4)
 }
 func TestMissingScopeReturnsChallengeWithoutBackend(t *testing.T) {
 	a := &App{AuthChallenge: func(string) string { return `Bearer scope="mail.read mail.send"` }}

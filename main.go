@@ -69,7 +69,7 @@ func newHandler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		json.NewEncoder(w).Encode(map[string]any{"service": "angelos", "version": "0.1.0", "configured": configured})
+		json.NewEncoder(w).Encode(map[string]any{"service": "angelos", "version": app.Version, "configured": configured})
 	})
 	return secureHeaders(mux)
 }
