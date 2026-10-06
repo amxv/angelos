@@ -1,0 +1,7 @@
+# Keep local credentials and generated files out of deployments.
+.env
+.env.*
+node_modules
+.astro
+dist
+.vercel
