@@ -92,11 +92,17 @@ func (a *App) Server() *mcp.Server {
 	register(s, a, tool("mail_set_flags", "Add or remove flags without replacing concurrent Apple Mail flags. Supply unchanged_since when CONDSTORE is available; a conflict requires rereading. Cannot set Deleted.", false, true, false), "mail.write", func(ctx context.Context, in mail.FlagRequest) (any, error) { return a.Mail.SetFlags(ctx, in) })
 	register(s, a, tool("mail_create_folder", "Create a mailbox folder. Does not create or change server-side filtering rules.", false, false, false), "mail.write", func(ctx context.Context, in struct {
 		Name string `json:"name"`
-	}) (any, error) { e := a.Mail.CreateFolder(ctx, in.Name); return result{"created": e == nil}, e })
+	}) (any, error) {
+		e := a.Mail.CreateFolder(ctx, in.Name)
+		return result{"created": e == nil}, e
+	})
 	register(s, a, tool("mail_rename_folder", "Rename a folder. This also changes what concurrent mail clients display; requires explicit user intent.", false, true, false), "mail.write", func(ctx context.Context, in struct {
 		Old string `json:"old"`
 		New string `json:"new"`
-	}) (any, error) { e := a.Mail.RenameFolder(ctx, in.Old, in.New); return result{"renamed": e == nil}, e })
+	}) (any, error) {
+		e := a.Mail.RenameFolder(ctx, in.Old, in.New)
+		return result{"renamed": e == nil}, e
+	})
 	register(s, a, tool("mail_copy", "Copy one exact message to an existing folder. Copying again can create duplicates; do not retry ambiguous outcomes.", false, false, false), "mail.write", func(ctx context.Context, in transfer) (any, error) {
 		return a.Mail.Copy(ctx, in.Reference, in.Destination)
 	})
