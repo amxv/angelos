@@ -26,6 +26,8 @@ type Backend interface {
 type queryInput struct {
 	Action     string             `json:"action"`
 	PreparedID string             `json:"prepared_id,omitempty"`
+	References []mail.Reference `json:"references,omitempty" jsonschema:"read_many: 1-10 exact references in input order"`
+	MaxResponseBytes int `json:"max_response_bytes,omitempty" jsonschema:"read_many JSON payload budget: 4096-131072 bytes; default 65536"`
 	Search     mail.SearchRequest `json:"search,omitempty"`
 	Reference  mail.Reference     `json:"reference,omitempty"`
 	Index      int                `json:"index,omitempty" jsonschema:"One-based read attachment index"`
@@ -69,6 +71,7 @@ var actions = map[string]map[string]actionRule{
 		"triage":       {optional: "search detail"},
 		"conversation": {required: "reference", optional: "search detail"},
 		"read":         {required: "reference", optional: "detail"},
+		"read_many":    {required: "references", optional: "detail max_response_bytes"},
 		"attachment":   {required: "reference index"},
 		"send_status":  {required: "prepared_id"},
 	},
@@ -211,7 +214,7 @@ func validateAction(name string, raw json.RawMessage) error {
 }
 
 func (a *App) registerTools(s *mcp.Server) {
-	grouped(s, a, tool("mail_query", "Read-only; exact references and SPECIAL-USE names. Gmail labels overlap; All is not Archive. Bounded UID order; follow next_cursor on empty pages too. Triage: unread OR flagged, page counts. Conversation: same-folder ID links; search only folder/order/cursor/limit. PEEK reads; full detail opt-in. Attachments: base64, max 2 MiB; never execute. send_status needs send scope/store, not sending enabled; expires_at is preparation deadline.", true, false, false), "mail.read", a.query)
+	grouped(s, a, tool("mail_query", "Read-only; exact references and SPECIAL-USE names. Gmail labels overlap; All is not Archive. Bounded UID order; follow next_cursor on empty pages too. Triage: unread OR flagged, page counts. Conversation: same-folder ID links; search only folder/order/cursor/limit. PEEK reads; read_many batches 1-10 refs in input order with bounded JSON; inspect each status/next_index. Full detail opt-in. Attachments: base64, max 2 MiB; never execute. send_status needs send scope/store, not sending enabled; expires_at is preparation deadline.", true, false, false), "mail.read", a.query)
 	grouped(s, a, tool("mail_create", "Create folder, copy exact message, or save draft without sending. Defaults to SPECIAL-USE Drafts; preserves BCC. May duplicate; verify uncertain outcomes before retrying. Save replacement drafts first, then explicitly retire old UID.", false, false, false), "mail.write", a.create)
 	grouped(s, a, tool("mail_modify", "Add/remove flags, never Deleted; use unchanged_since with CONDSTORE, reread conflicts. Rename affects other clients. Move requires UID MOVE; Trash needs unique SPECIAL-USE. Refresh references afterward; never blindly retry uncertain outcomes.", false, true, false), "mail.write", a.modify)
 	register(s, a, tool("mail_delete_permanently", "Irreversible exact UID EXPUNGE, never global. Requires explicit per-action user confirmation and permanent-delete gate. Unavailable for Gmail/Workspace.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
@@ -219,7 +222,7 @@ func (a *App) registerTools(s *mcp.Server) {
 			return nil, mail.ErrGmailDelete
 		}
 		if !a.EnableDelete {
-			return nil, errors.New("permanent deletion is disabled")
+			return nil, deploymentDisabledError("permanent deletion is disabled")
 		}
 		return a.Mail.Delete(ctx, in)
 	})
@@ -268,6 +271,8 @@ func (a *App) query(ctx context.Context, in queryInput) (any, error) {
 			return v, e
 		}
 		return searchSummary(v, in.Search.Folder), nil
+	case "read_many":
+		return a.readMany(ctx, in)
 	case "read":
 		v, e := a.Mail.Read(ctx, in.Reference)
 		if e != nil || in.Detail == "full" {
@@ -329,3 +334,4 @@ func (a *App) prepare(ctx context.Context, in prepareInput) (any, error) {
 	}
 	return preview(p), nil
 }
+
