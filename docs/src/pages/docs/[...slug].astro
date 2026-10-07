@@ -18,6 +18,7 @@ const tocHeadings = headings.filter(heading => heading.depth > 1 && heading.dept
 <SiteLayout title={`${entry.data.title} | ${siteConfig.name} Docs`} description={entry.data.description}>
   <section class="shell docs-shell">
     <aside class="docs-sidebar" id="docs-sidebar" aria-label="Documentation navigation">
+      <button class="sidebar-close" type="button" data-sidebar-dismiss aria-label="Close documentation navigation">Close <span aria-hidden="true">×</span></button>
       <a class="docs-sidebar__eyebrow" href="/docs">← The handbook</a>
       {grouped.map(group => (<div class="docs-sidebar__group"><p>{group.category}</p><ul>{group.entries.map(doc => (<li><a class:list={["docs-sidebar__link", doc.id === entry.id && "is-active"]} href={`/docs/${doc.id}`} aria-current={doc.id === entry.id ? "page" : undefined}>{doc.data.title}</a></li>))}</ul></div>))}
     </aside>
@@ -32,4 +33,7 @@ const tocHeadings = headings.filter(heading => heading.depth > 1 && heading.dept
     <aside class="docs-toc" aria-label="On this page"><p class="docs-toc__eyebrow">On this page</p><ul>{tocHeadings.map(heading => (<li class:list={[heading.depth === 3 && "toc-subheading"]}><a href={`#${heading.slug}`}>{heading.text}</a></li>))}</ul></aside>
   </section>
 </SiteLayout>
-<script>import "zuedocs/docsEnhancements";</script>
+<script>
+  import "zuedocs/docsEnhancements";
+  import "../../scripts/docsAccessibility";
+</script>

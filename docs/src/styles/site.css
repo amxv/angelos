@@ -181,3 +181,24 @@ em { font-weight: inherit; }
   .shell, .site-header__inner, .docs-shell { width: calc(100% - 32px); }.brand { gap: 7px; }.brand__name { font-size: 1.6rem; }.brand__logo { width: 28px; height: 28px; }.site-header__actions { gap: .4rem; }.site-nav { gap: .55rem; }.site-nav__link { font-size: .63rem; }.theme-toggle { width: 30px; height: 30px; }.site-header--docs .site-nav { display: none; }.home-hero h1 { font-size: 4.15rem; }.eyebrow { font-size: .59rem; }.hero-links { gap: 20px; }.action-link { padding: 13px 18px; gap: 1.7rem; }.quiet-link { font-size: .74rem; }.mail-demo { padding-inline: 15px; }.demo-prompt { font-size: 1.45rem; }.letter-stack { padding-inline: 13px; }.mail-time { font-size: .44rem; }.mail-row strong { font-size: .65rem; }.mail-row p { font-size: .59rem; }.demo-tool { gap: 6px; }.demo-tool > span:first-child { font-size: .43rem; }.demo-tool code { font-size: .47rem; }.demo-disclaimer { font-size: .47rem; }.read-only { font-size: .45rem; }.section-intro h2, .principles-section h2 { font-size: 3.15rem; }.colophon__top { grid-template-columns: 1fr; gap: 17px; }.colophon__top nav { grid-template-columns: 1fr 1fr; margin-top: 5px; }.guide-map__group > div { grid-template-columns: 1fr; }.docs-hero h1 { font-size: 3rem; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+.sidebar-close { display: none; }
+@media (max-width: 768px) {
+  .sidebar-close { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 0 0 16px; margin-bottom: 24px; font-size: .8rem; cursor: pointer; }
+  .sidebar-close span { font-size: 1.6rem; line-height: 1; }
+}
+@media (max-width: 768px) {
+  .docs-sidebar { visibility: hidden; }
+  .docs-sidebar.is-open { visibility: visible; }
+}
+/* Demo annotations describe real limits; keep them legible at every width. */
+.demo-label, .demo-disclaimer { font-size: .7rem; }
+.demo-disclaimer { line-height: 1.6; }
+.demo-prompt > span { font-size: .62rem; }
+.inbox-heading, .mail-time, .mail-row small, .thread-line small { font-size: .6rem; }
+.mail-row strong { font-size: .75rem; }.mail-row p { font-size: .72rem; }
+.demo-note { font-size: .7rem; }.demo-note small { font-size: .63rem; }
+.demo-tool, .demo-tool > span:first-child, .demo-tool code, .read-only { font-size: .58rem; }
+.thread-line p { font-size: .73rem; }.coverage-note { font-size: .68rem; }
+.reply-letter dl { font-size: .67rem; }.reply-body { font-size: .78rem; }
+@media (max-width: 900px) and (min-width: 769px) { .demo-tool > span:first-child { display: none; } }
+@media (max-width: 430px) { .demo-tool > span:first-child { display: none; }.mail-time { display: none; }.demo-label { font-size: .63rem; }.letter-stack { padding-inline: 12px; } }
