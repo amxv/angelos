@@ -1,51 +1,51 @@
 ---
-title: Overview
-description: Use an existing mailbox through a private Go MCP server while keeping your other mail clients.
-summary: Start here for capabilities, safe defaults, and setup order.
+title: Meet Angelos
+description: Let an AI assistant help with your existing inbox, while you keep the mail apps you already use.
+summary: What Angelos does, what you need, and where to start.
 order: 1
-category: Start
+category: Get started
 ---
 
-# Overview
+Angelos connects an AI assistant to your existing email account. Ask it to find a receipt, catch you up on an exchange, organize messages, or prepare a reply for review. You can keep using Apple Mail or another mail app alongside it.
 
-Angelos gives an agent a scoped interface to one existing IMAP/SMTP mailbox. It runs as an OAuth-protected remote MCP server written in Go. Apple Mail and other IMAP clients can remain connected to the same account.
+It is a self-hosted connection between an assistant and one mailbox. There is no Angelos-hosted signup or new email account to create. You or someone you trust runs the service and decides which capabilities to enable.
 
-Version 0.6.0 groups 21 operations into six MCP tools. It adds read-only inbox triage and same-folder, header-linked conversation lookup, while retaining Gmail/Workspace support through server-side XOAUTH2. See [Migration and token budget](/docs/tool-migration) for the client contract and [Gmail and Google Workspace](/docs/gmail-workspace) for provider setup and limits.
+## Start with something useful
 
-## What it supports
+Once connected, try:
 
-- Discover provider capabilities and folders, search mail, and read plain-text content without marking messages read
-- Triage unread or flagged messages with counts for the returned page, then inspect a bounded conversation using exact header links
-- Opt into mailbox organization, including flags, folders, copies, moves, Trash, and saved drafts
-- Connect Gmail/Workspace through owner-provisioned XOAUTH2, with provider-specific safeguards
-- Prepare messages, natural replies/reply-all, and quoted or attached forwards with fully reviewed recipients and attachments
-- Send a reviewed immutable message through a durable, one-time dispatch claim
+> Show me unread or flagged messages from this week. Read the relevant messages and suggest which might need a response. Leave everything unchanged.
 
-Read access is the default. Mailbox writes, sending, and permanent deletion have separate deployment gates. Tokens also need the applicable scopes. Some operations require provider capabilities; unsupported operations fail rather than falling back to a mailbox-wide destructive command.
+Or ask a narrower question:
 
-The [tool reference](/docs/tools) describes current arguments, limits, and exclusions. “Email access” does not include a provider's account settings, server-side filtering rules, or desktop-only mail data.
+> Find the invoice from billing@example.com that arrived last month. Tell me what attachments it has.
 
-## Inbox workflow
+Angelos supplies the mail and the tools; your assistant interprets the request and explains what it found. Reading through Angelos does not mark a message as read. Unread or flagged mail is a useful starting point, but those flags alone do not tell the assistant what is urgent.
 
-1. Call `mail_query` with `action: "triage"` to find unread or flagged messages. Add ordinary search filters when useful. Counts describe only the returned rows; unread and flagged counts overlap and do not indicate urgency.
-2. Choose an exact message reference and call `mail_query` with `action: "conversation"` for related summaries in that folder. Follow its own cursor even after an empty page.
-3. Read the exact references needed to understand the exchange. Conversation summaries contain no message bodies and are not a complete account-wide thread.
-4. If a response is wanted, use `mail_prepare` with `action: "reply"` or `"reply_all"`, then review the full preparation before separately authorizing sending.
+## What you can do
 
-See the [copyable workflow examples](/docs/tools#inbox-workflow-example). Both query actions are read-only, with a default 25-row limit, a maximum of 100 rows, and at most one 1000-UID scan window per call. They do not mark messages read. Conversation linkage uses a fixed set of IDs from the anchor's Message-ID, References, and In-Reply-To headers, without subject matching or recursive expansion. Messages in other folders or without usable links may be missing.
+- **Find and understand mail.** Search folders, read messages, retrieve attachments, and look up related messages linked by email headers in the same folder.
+- **Organize your inbox.** With mailbox changes enabled, mark messages read, add flags, create folders, copy or move mail, and move messages to Trash.
+- **Write with review.** Prepare new messages, replies, reply-all, and forwards. Review the final recipients, text, and attachments before sending.
+- **Keep your usual mail app.** Both clients use the same server mailbox. Changes made in either can appear in the other.
 
-Saving a draft still creates a new message. Lossless opening and editing of an existing saved draft is not supported.
+Read access is the default. Mailbox changes, sending, and permanent deletion have separate operator-controlled switches and access permissions. Your client remains responsible for getting the required approval; Angelos does not have its own human-approval screen.
 
-## Setup order
+## Choose a mailbox
 
-1. Read [Safety and concurrency](/docs/safety), especially the trusted-client confirmation boundary.
-2. Choose a mailbox and set its [configuration](/docs/configuration).
-3. Configure an existing OAuth issuer using [Authentication](/docs/authentication).
-4. [Deploy the API](/docs/deployment) separately from this static documentation site.
-5. Verify reads before enabling changes or sends.
+Spacemail is the default provider. Gmail and Google Workspace are also supported through Google credentials provisioned by the mailbox owner on the server. Other compatible IMAP/SMTP providers can use password authentication. Gmail setup is not an interactive Angelos account-linking flow.
 
-No mailbox credentials, OAuth account, or deployment are created by cloning the repository. Automated tests and a successful build do not replace validation against your own provider.
+## Know the boundaries
 
-## Contribute
+Angelos sees server mail, not local-only folders or unsynchronized drafts in a desktop app. Related-message lookup is not a complete account-wide thread: it can miss mail in other folders or without usable header links. Saving a draft creates a new message; lossless editing of an existing saved draft is not supported.
 
-Keep documentation aligned with implemented behavior. See [Architecture](/docs/architecture), [Testing](/docs/testing), and [Writing docs](/docs/writing-docs).
+It also does not manage mail accounts, provider filtering rules, or desktop-only rules. See [capabilities and limits](/docs/tools) for the exact surface.
+
+## Choose your next step
+
+- **I have a connection URL:** follow [Connect your assistant](/docs/quickstart).
+- **I want everyday examples:** open [Work with your inbox](/docs/inbox-guide) or [Write and send mail](/docs/sending-guide).
+- **I run the service:** follow [Self-host Angelos](/docs/self-hosting), then use the configuration and authentication reference as needed.
+- **I am building an agent:** use the [Agent playbook](/docs/agent-guide), then the [tool reference](/docs/tools).
+
+For shared-mailbox effects, private-data handling, and approval responsibilities, read [Safety and concurrency](/docs/safety).

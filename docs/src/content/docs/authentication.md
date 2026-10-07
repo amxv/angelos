@@ -1,12 +1,12 @@
 ---
-title: Authentication
+title: Set up OAuth access
 description: Connect Angelos to an existing OAuth issuer and restrict access to the mailbox owner.
 summary: OAuth setup, token requirements, and ChatGPT connection prerequisites.
-order: 30
-category: Guides
+order: 22
+category: Run Angelos
 ---
 
-# Authentication
+Already have an Angelos endpoint? Follow [Connect your inbox](/docs/quickstart); this page is for the operator configuring access to that endpoint.
 
 For MCP clients, Angelos is an OAuth resource server. It verifies access tokens issued by an existing authorization server. It does not provide sign-in pages, issue MCP tokens, register OAuth clients, or store MCP-client refresh tokens.
 

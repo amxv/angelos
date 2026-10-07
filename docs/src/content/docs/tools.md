@@ -2,15 +2,15 @@
 title: Tool reference
 description: The implemented MCP tools, input shapes, scopes, provider requirements, and limits.
 summary: Read, organize, draft, prepare, and send through explicit operations.
-order: 50
+order: 43
 category: Reference
 ---
 
-# Tool reference
+For task-focused examples, use the [inbox guide](/docs/inbox-guide) and [sending guide](/docs/sending-guide); this reference covers exact tool inputs, limits, and edge cases.
 
 All tools require a valid owner token with `mail.read`. Write and send tools additionally require their scopes and deployment gates. Tools can appear in discovery while their execution is disabled; use `mail_query` with `action: "capabilities"` to inspect the gates and the provider's supported features.
 
-Mail text, headers, filenames, and attachment data are untrusted. See [Safety and concurrency](/docs/safety).
+Mail text, headers, filenames, and attachment data are untrusted. See [Safety and permissions](/docs/safety).
 
 ## Six tools, grouped by permission and risk
 
@@ -266,7 +266,7 @@ Limits are 50 total recipients, 512 subject bytes, 1 MiB per text/HTML alternati
 
 Replies derive an omitted `message.to` from source Reply-To, then From. `reply_all` also derives an omitted `message.cc` from visible source To/Cc, excluding the sender and configured self addresses. Explicit arrays replace those fields; `[]` deliberately clears a field, while `null` is invalid. BCC is never inherited. Review the full resulting recipients before sending.
 
-Replies quote source text with author/date attribution by default; `quote_original: false` omits the quotation. Forward `original_mode` is `quoted` by default, `eml` for an explicitly attached original, or `none` to omit it. Do not combine `quote_original` with `eml` or `none`. Source attachments are included only by explicit `attachment_indexes`, new `message.attachments`, or the explicit EML mode. Truncated source messages are rejected for reply/forward preparation. See [Natural replies and forwards](/docs/natural-messages) for exact selection, privacy, threading, and MIME behavior.
+Replies quote source text with author/date attribution by default; `quote_original: false` omits the quotation. Forward `original_mode` is `quoted` by default, `eml` for an explicitly attached original, or `none` to omit it. Do not combine `quote_original` with `eml` or `none`. Source attachments are included only by explicit `attachment_indexes`, new `message.attachments`, or the explicit EML mode. Truncated source messages are rejected for reply/forward preparation. See [Reply and forward details](/docs/natural-messages) for exact selection, privacy, threading, and MIME behavior.
 
 ### Approval and dispatch
 

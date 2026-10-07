@@ -2,11 +2,11 @@
 title: Deploy the API
 description: Deploy the Go MCP API separately from the existing static documentation site.
 summary: Vercel project separation, environment setup, and post-deployment checks.
-order: 25
-category: Guides
+order: 23
+category: Run Angelos
 ---
 
-# Deploy the API
+Start with [Self-host Angelos](/docs/self-hosting) to prepare your mailbox and OAuth issuer before deploying the API.
 
 The repository contains two independent applications:
 
@@ -20,7 +20,8 @@ Use separate Vercel projects. The existing documentation project and domain rema
 - A mailbox with IMAP and SMTP access
 - An existing OAuth issuer meeting the [authentication requirements](/docs/authentication)
 - A Vercel account and the official Vercel CLI
-- The Go toolchain declared by `go.mod` for local checks
+- Access to the currently private source repository
+- Go 1.27.1 for local checks, matching the requested toolchain in `go.mod` and CI
 
 Vercel's Go framework preset supports a root `main.go` server listening on `PORT`. The root `vercel.json` selects that preset and builds the API. Vercel reads the Go version/toolchain from `go.mod`. See [Vercel's Go runtime documentation](https://vercel.com/docs/functions/runtimes/go).
 
@@ -35,7 +36,7 @@ vercel link
 
 Choose or create a distinct API project and confirm its root directory is the repository root. Check the project selected by the CLI before adding secrets or deploying. Keep `.vercel/` untracked.
 
-Add each required variable from [Configuration](/docs/configuration) to that project's production environment. Prefer Vercel's sensitive environment settings for mailbox passwords, Google client secret/refresh token when applicable, and durable-store credentials. Gmail owners must separately complete the approved manual grant setup in [Gmail and Google Workspace](/docs/gmail-workspace); deployment does not create that grant. Enter secret values interactively instead of placing them in command history:
+Add each required variable from [Configuration reference](/docs/configuration) to that project's production environment. Prefer Vercel's sensitive environment settings for mailbox passwords, Google client secret/refresh token when applicable, and durable-store credentials. Gmail owners must separately complete the approved manual grant setup in [Gmail and Google Workspace](/docs/gmail-workspace); deployment does not create that grant. Enter secret values interactively instead of placing them in command history:
 
 ```bash
 vercel env add MAIL_PASSWORD production
@@ -65,4 +66,4 @@ Run checks against the actual production API URL rather than assuming a successf
 
 Keep mail operation timeouts inside the selected function duration. Do not rely on background goroutines continuing after an HTTP response. Vercel blocks outgoing SMTP port 25; authenticated submission on 465 or 587 is the intended path. See [Vercel's SMTP guidance](https://vercel.com/kb/guide/serverless-functions-and-smtp).
 
-Durable send state must live outside a function instance. A process restart, scale-out, or deployment can discard local memory. See [Safety and concurrency](/docs/safety).
+Durable send state must live outside a function instance. A process restart, scale-out, or deployment can discard local memory. See [Safety and permissions](/docs/safety).

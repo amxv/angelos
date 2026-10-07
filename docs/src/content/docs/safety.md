@@ -1,12 +1,12 @@
 ---
-title: Safety and concurrency
+title: Safety and permissions
 description: Understand shared-mailbox effects, confirmation boundaries, send retries, and private-data handling.
 summary: What Angelos enforces and what remains the responsibility of the owner and MCP client.
-order: 15
-category: Concepts
+order: 42
+category: Reference
 ---
 
-# Safety and concurrency
+Start with the [inbox guide](/docs/inbox-guide) or [sending guide](/docs/sending-guide) for everyday actions; this page explains the permission and data-handling boundaries behind them.
 
 Angelos operates on a real provider mailbox. Treat its credentials, OAuth grants, write tools, and durable send store as access to that account.
 

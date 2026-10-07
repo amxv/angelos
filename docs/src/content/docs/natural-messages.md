@@ -1,14 +1,14 @@
 ---
-title: Natural replies and forwards
+title: Reply and forward details
 description: Prepare ordinary client-style mail while preserving exact approval and privacy boundaries.
 summary: Reply-all selection, case-preserved threading, quotations, HTML alternatives, and explicit original attachments.
-order: 65
+order: 44
 category: Reference
 ---
 
-# Natural replies and forwards
+Use the [sending guide](/docs/sending-guide) for the review-and-send workflow; this page explains recipient selection, threading, quotations, and original attachments.
 
-Version 0.3 keeps six MCP tool names and extends `mail_prepare`. Messages use ordinary MIME layouts and contain no Angelos `X-Mailer` header or branded MIME boundaries. Client rendering, SMTP relay headers, and other raw-message details can still differ from Apple Mail or other clients. The implementation does not impersonate another mail client.
+The reply and forward features introduced in version 0.3 remain available through `mail_prepare` in the current six-tool interface. Messages use ordinary MIME layouts and contain no Angelos `X-Mailer` header or branded MIME boundaries. Client rendering, SMTP relay headers, and other raw-message details can still differ from Apple Mail or other clients. The implementation does not impersonate another mail client.
 
 ## Reply and reply-all
 
@@ -78,6 +78,6 @@ Preparation never sends mail. All final recipients, both body alternatives, atta
 
 Refresh tool discovery for version 0.3. New optional preparation fields and the `reply_all` action are available under the existing six tools. The server gates, OAuth scopes, permanent-delete boundary, and send-confirmation flow are unchanged.
 
-Automated fixtures cover MIME parsing, exact bytes, recipient selection, threading, private headers, malformed content, signed OAuth/MCP routing, and TLS IMAP preparation. They do not establish that every mail client renders identically or replace live provider validation. See [Testing](/docs/testing).
+Automated fixtures cover MIME parsing, exact bytes, recipient selection, threading, private headers, malformed content, signed OAuth/MCP routing, and TLS IMAP preparation. They do not establish that every mail client renders identically or replace live provider validation. See [Run the tests](/docs/testing).
 
 The implementation follows useful patterns in the author's Apache-2.0 [icloud-cli reply](https://github.com/amxv/icloud-cli/blob/d07385a364e95ccdfeefcdaf0cc867938ba8f9ec/internal/mail/reply.go), [forward](https://github.com/amxv/icloud-cli/blob/d07385a364e95ccdfeefcdaf0cc867938ba8f9ec/internal/mail/forward.go), and [MIME composition](https://github.com/amxv/icloud-cli/blob/d07385a364e95ccdfeefcdaf0cc867938ba8f9ec/internal/mail/send_compose.go) code, while preserving case-sensitive IDs, immutable approvals, complete source metadata, and Angelos's existing safety limits.

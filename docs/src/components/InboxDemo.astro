@@ -1,0 +1,54 @@
+<section class="mail-demo" id="in-action" aria-labelledby="demo-label">
+  <div class="mail-demo__top"><span id="demo-label">A day with Angelos</span><span class="demo-label">Illustrative example</span></div>
+  <div class="demo-controls" role="group" aria-label="Explore an inbox workflow">
+    <button type="button" data-demo="triage" aria-pressed="true" aria-controls="example-triage"><span>01</span> Find</button>
+    <button type="button" data-demo="context" aria-pressed="false" aria-controls="example-context"><span>02</span> Understand</button>
+    <button type="button" data-demo="reply" aria-pressed="false" aria-controls="example-reply"><span>03</span> Reply</button>
+  </div>
+  <div class="demo-stage">
+    <div id="example-triage" class="demo-example" data-example="triage">
+      <p class="demo-prompt"><span>You, to your agent</span>“Show me what’s unread or starred.”</p>
+      <div class="letter-stack">
+        <div class="inbox-heading"><span>INBOX</span><span>3 example messages</span></div>
+        <div class="mail-row"><span class="mail-avatar">ML</span><div><strong>Mira Lee <span class="status-dot" aria-label="Unread"></span></strong><p>A few thoughts on the proposal</p><small>Proposal.pdf <span aria-hidden="true">↗</span></small></div><span class="mail-time">09:41</span></div>
+        <div class="mail-row"><span class="mail-avatar avatar-sage">JS</span><div><strong>Jules Santos</strong><p>Friday’s studio visit</p><small class="starred">☆ Starred</small></div><span class="mail-time">08:30</span></div>
+        <div class="mail-row"><span class="mail-avatar avatar-sand">AP</span><div><strong>Alex Park <span class="status-dot" aria-label="Unread"></span></strong><p>The revised project timeline</p></div><span class="mail-time">Yesterday</span></div>
+        <p class="demo-note"><span aria-hidden="true">✳</span> A starting point, ready for a closer look.<small>Selected by unread or starred status, not urgency.</small></p>
+      </div>
+      <div class="demo-tool"><span>Behind the scenes</span><code>mail_query · triage</code><span class="read-only">Read-only</span></div>
+    </div>
+    <div id="example-context" class="demo-example" data-example="context" hidden>
+      <p class="demo-prompt"><span>You, to your agent</span>“Catch me up on Mira’s proposal.”</p>
+      <div class="letter-stack context-letter">
+        <div class="inbox-heading"><span>THE CONVERSATION</span><span>Example summary</span></div>
+        <div class="thread-line"><span class="thread-dot"></span><div><small>MONDAY · MIRA</small><p>Shared the first proposal for the studio project.</p></div></div>
+        <div class="thread-line"><span class="thread-dot"></span><div><small>TUESDAY · YOU</small><p>Asked for a simpler first phase.</p></div></div>
+        <div class="thread-line"><span class="thread-dot active"></span><div><small>TODAY · MIRA</small><p>Sent a revised scope. Your agent can read the messages before suggesting a reply.</p></div></div>
+        <p class="coverage-note">Related messages in this folder. Other folders and missing header links may leave gaps.</p>
+      </div>
+      <div class="demo-tool"><span>Behind the scenes</span><code>conversation → read</code><span class="read-only">Read-only</span></div>
+    </div>
+    <div id="example-reply" class="demo-example" data-example="reply" hidden>
+      <p class="demo-prompt"><span>You, to your agent</span>“Prepare a reply. I’ll review it first.”</p>
+      <div class="letter-stack reply-letter">
+        <div class="inbox-heading"><span>PREPARED REPLY</span><span class="review-badge">For your review</span></div>
+        <dl><div><dt>To</dt><dd>Mira Lee &lt;mira@example.com&gt;</dd></div><div><dt>Re</dt><dd>A few thoughts on the proposal</dd></div></dl>
+        <div class="reply-body"><p>Hi Mira,</p><p>Thanks for sending the revised scope. I’ll take a look and get back to you.</p><p>Alex</p></div>
+        <p class="coverage-note">Review every recipient, the full message, quoted text, and attachments before authorizing a send.</p>
+      </div>
+      <div class="demo-tool"><span>Behind the scenes</span><code>mail_prepare · reply</code><span class="read-only">Not sent</span></div>
+    </div>
+  </div>
+  <p class="demo-disclaimer">Fictional messages, real workflows. No mailbox is connected here.</p>
+  <p class="visually-hidden" aria-live="polite" data-demo-announcement></p>
+</section>
+<script>
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>("[data-demo]")];
+  const examples = [...document.querySelectorAll<HTMLElement>("[data-example]")];
+  const announcement = document.querySelector<HTMLElement>("[data-demo-announcement]");
+  buttons.forEach((button) => button.addEventListener("click", () => {
+    buttons.forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+    examples.forEach((example) => { example.hidden = example.dataset.example !== button.dataset.demo; });
+    if (announcement) announcement.textContent = `${button.textContent?.trim()} example shown. Fictional messages; no mail is changed.`;
+  }));
+</script>

@@ -2,11 +2,11 @@
 title: Gmail and Google Workspace
 description: Configure one Gmail-enabled mailbox with server-side XOAUTH2 and conservative Gmail-specific safeguards.
 summary: Personal/internal Gmail compatibility, separate OAuth planes, manual grant setup, and provider limits.
-order: 42
-category: Guides
+order: 24
+category: Run Angelos
 ---
 
-# Gmail and Google Workspace
+If your operator has already connected Gmail, start with [Connect your inbox](/docs/quickstart); this page covers server-side Google setup and its restrictions.
 
 Use the `gmail` preset for a consumer Gmail or Gmail-enabled Google Workspace mailbox, including a custom-domain address. This milestone targets personal/self-hosted and genuine internal Workspace use. It does not create Google credentials, run consent, change administrator settings, or establish live-account eligibility.
 

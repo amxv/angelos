@@ -1,0 +1,58 @@
+---
+import SiteHeader from "zuedocs/components/SiteHeader.astro";
+import "zuedocs/styles.css";
+import "../styles/site.css";
+import { primaryNav, siteConfig } from "../data/docs";
+interface Props { title: string; description: string; home?: boolean; }
+const { title, description, home = false } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script is:inline>
+      (() => {
+        let mode = "system";
+        try { mode = localStorage.getItem("zuedocs-theme-mode") || "system"; } catch {}
+        const theme = mode === "dark" || mode === "light" ? mode : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.themeMode = mode;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#f5f2e9" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap.xml" />
+    <link rel="alternate" type="text/markdown" href={Astro.url.pathname === "/" ? "/docs.md" : `${Astro.url.pathname.replace(/\/$/, "")}.md`} title="Markdown documentation" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  </head>
+  <body class:list={[home && "is-home"]}>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <SiteHeader siteConfig={siteConfig} primaryNav={primaryNav} />
+    <main id="main-content" tabindex="-1"><slot /></main>
+    <footer class="colophon" data-pagefind-ignore>
+      <div class="shell colophon__top">
+        <a class="colophon__brand" href="/">Angelos<span aria-hidden="true">↗</span></a>
+        <p>A thoughtful connection<br />between your agent and your inbox.</p>
+        <nav aria-label="Footer">
+          <a href="/docs/quickstart">Get connected</a>
+          <a href="/docs/agent-guide">For agents</a>
+          <a href="/docs/self-hosting">Self-hosting</a>
+          <a href="/docs/safety">Safety & permissions</a>
+        </nav>
+      </div>
+      <div class="shell colophon__bottom"><span>Made for the mail you already have.</span><span>v0.6 · <a href="/docs.md">Markdown index</a> · <a href="/docs/architecture">Under the hood</a></span></div>
+    </footer>
+  </body>
+</html>

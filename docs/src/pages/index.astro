@@ -1,62 +1,29 @@
 ---
-import BaseLayout from "zuedocs/layouts/BaseLayout.astro";
-import { getCollection } from "astro:content";
-import { primaryNav, siteConfig } from "../data/docs";
-
-const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.order);
+import SiteLayout from "../layouts/SiteLayout.astro";
+import InboxDemo from "../components/InboxDemo.astro";
+import { siteConfig } from "../data/docs";
 ---
-
-<BaseLayout
-  title={`${siteConfig.name} | ${siteConfig.strapline}`}
-  description={siteConfig.description}
-  siteConfig={siteConfig}
-  primaryNav={primaryNav}
->
-  <section class="hero shell">
-    <div class="hero__copy">
-      <p class="section-label">Agent-native email</p>
-      <h1>Give agents a clean interface to work with email.</h1>
-      <p class="hero__lede">
-        Connect an existing mailbox to a private Go MCP server. Read and organize mail,
-        prepare reviewed messages, and keep your other mail clients connected.
-      </p>
-      <div class="hero__actions">
-        <a class="button button--solid" href="/docs/overview">Read the overview</a>
-        <a class="button button--ghost" href="/docs">Browse the docs</a>
-      </div>
+<SiteLayout title="Angelos — A little less inbox." description={siteConfig.description} home>
+  <section class="shell home-hero">
+    <div class="home-hero__copy">
+      <p class="eyebrow"><span class="tiny-star" aria-hidden="true">✳</span> Your mail. A little lighter.</p>
+      <h1>Your inbox,<br /><em>in good hands.</em></h1>
+      <p class="home-hero__lede">Give your AI agent a thoughtful way to work with email. Find what needs attention, make sense of a conversation, and prepare your next reply.</p>
+      <div class="hero-links"><a class="action-link" href="/docs/quickstart">Get started <span aria-hidden="true">↗</span></a><a class="quiet-link" href="#in-action">See it in action <span aria-hidden="true">↓</span></a></div>
+      <div class="hero-postscript"><span class="postscript-line" aria-hidden="true"></span><p>Your existing mailbox.<br />Your favorite compatible agent.</p></div>
     </div>
-    <aside class="hero__panel">
-      <p class="hero__panel-label">Deliberate access</p>
-      <ul class="hero__signal-list">
-        <li>OAuth-protected access to one configured mailbox.</li>
-        <li>Separate opt-ins for mailbox writes and sending.</li>
-        <li>Exact prepared payloads and durable dispatch records.</li>
-      </ul>
-      <div class="hero__terminal">
-        <span>$ go test ./...</span>
-        <span>$ go run .</span>
-        <span>Read access first. Enable changes deliberately.</span>
-      </div>
-    </aside>
+    <div class="home-hero__visual"><span class="postal-mark" aria-hidden="true">GOOD MAIL<br /><span>LESS FRICTION</span><svg viewBox="0 0 130 25"><path d="M0 4q16-8 32 0t32 0t32 0t32 0M0 12q16-8 32 0t32 0t32 0t32 0M0 20q16-8 32 0t32 0t32 0t32 0"/></svg></span><InboxDemo /></div>
   </section>
-
-  <section class="shell docs-teaser">
-    <div class="section-heading">
-      <p class="section-label">Documentation</p>
-      <h2>Set up a mailbox. Understand every boundary.</h2>
-      <p>
-        Start with the safety model, configure Spacemail or explicit provider settings,
-        and connect through an existing OAuth issuer.
-      </p>
-    </div>
-    <div class="docs-teaser__grid">
-      {docs.map((entry) => (
-        <a class="docs-teaser__card" href={`/docs/${entry.id}`}>
-          <span>{entry.data.category}</span>
-          <h3>{entry.data.title}</h3>
-          <p>{entry.data.summary ?? entry.data.description}</p>
-        </a>
-      ))}
+  <section class="provider-line shell" aria-label="How Angelos connects"><span>ONE FAMILIAR INBOX. MORE WAYS TO WORK.</span><p>Spacemail first <span aria-hidden="true">/</span> Gmail & Workspace <span aria-hidden="true">/</span> Compatible IMAP + SMTP</p><a href="/docs/overview#choose-a-mailbox">Provider details <span aria-hidden="true">↗</span></a></section>
+  <section class="shell routine-section" aria-labelledby="routine-title">
+    <div class="section-intro"><p class="eyebrow">From a full inbox to a clear next step</p><h2 id="routine-title">Less sorting.<br /><em>More getting somewhere.</em></h2><p>Start with what you want to do. Angelos gives your agent the mail tools to help you get there.</p></div>
+    <div class="routine-list">
+      <a href="/docs/inbox-guide#find-your-starting-point"><span class="routine-number">01 /</span><div><h3>Find the mail that matters</h3><p>Bring unread and starred messages together. Search by sender, subject, participant, or date.</p><span class="prompt-sample">“Show me unread messages about the launch.”</span></div><span class="routine-arrow" aria-hidden="true">↗</span></a>
+      <a href="/docs/inbox-guide#understand-an-exchange"><span class="routine-number">02 /</span><div><h3>Pick up the conversation</h3><p>Find related messages in a folder, read the exchange, and check the attachment you actually need.</p><span class="prompt-sample">“What did we agree on in this conversation?”</span></div><span class="routine-arrow" aria-hidden="true">↗</span></a>
+      <a href="/docs/sending-guide"><span class="routine-number">03 /</span><div><h3>Make room for a thoughtful reply</h3><p>Prepare a reply, reply-all, or forward. Review the exact message before your agent sends it.</p><span class="prompt-sample">“Prepare a reply thanking Mira for the update.”</span></div><span class="routine-arrow" aria-hidden="true">↗</span></a>
+      <a href="/docs/inbox-guide#put-things-in-order"><span class="routine-number">04 /</span><div><h3>Leave things a little tidier</h3><p>With write access enabled, organize folders, move messages, and update read or starred status.</p><span class="prompt-sample">“Move this receipt to my Receipts folder.”</span></div><span class="routine-arrow" aria-hidden="true">↗</span></a>
     </div>
   </section>
-</BaseLayout>
+  <section class="principles-section" aria-labelledby="principles-title"><div class="shell principles-grid"><div><p class="eyebrow">A useful assistant. Clear boundaries.</p><h2 id="principles-title">Your mailbox.<br /><em>Your say.</em></h2><a class="quiet-link" href="/docs/safety">How permissions work <span aria-hidden="true">↗</span></a></div><div class="principles-notes"><article><span aria-hidden="true">↳</span><h3>Start by reading</h3><p>Read access is the default. Opening mail through Angelos doesn’t mark it as read. Your other mail clients can stay connected.</p></article><article><span aria-hidden="true">↳</span><h3>Give each action its place</h3><p>Changing mail and sending it have separate permissions. Your agent client is responsible for asking for your approval when needed.</p></article><article><span aria-hidden="true">↳</span><h3>Know what was sent</h3><p>Preparation and sending are separate steps. Check a send receipt after uncertainty instead of blindly trying again.</p></article></div></div></section>
+  <section class="shell start-section" aria-labelledby="start-title"><div class="section-intro"><p class="eyebrow">A good place to begin</p><h2 id="start-title">Take the next<br /><em>small step.</em></h2><p>Angelos is a self-hosted mail connection for MCP-compatible agents. There’s a path for using one, running one, or building on it.</p></div><div class="start-paths"><a href="/docs/quickstart"><span class="path-label">I WANT HELP WITH MY INBOX</span><h3>Connect your agent <span aria-hidden="true">↗</span></h3><p>Have an Angelos server ready? Connect, verify your mailbox, and try your first read-only request.</p></a><a href="/docs/self-hosting"><span class="path-label">I’M SETTING IT UP</span><h3>Run your own Angelos <span aria-hidden="true">↗</span></h3><p>Bring a mailbox, compatible OAuth issuer, and a Go deployment. Start with reads, then choose what to enable.</p></a><a href="/docs/agent-guide"><span class="path-label">I’M AN AGENT OR A BUILDER</span><h3>Learn the six tools <span aria-hidden="true">↗</span></h3><p>Use the workflow playbook, exact references, and copyable examples. Go deeper only when you need to.</p></a></div></section>
+</SiteLayout>

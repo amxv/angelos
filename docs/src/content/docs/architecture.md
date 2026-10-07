@@ -2,11 +2,11 @@
 title: Architecture
 description: The Go MCP boundary, OAuth resource server, mail transports, and durable send records.
 summary: How requests reach the mailbox and where state lives.
-order: 10
-category: Concepts
+order: 40
+category: Reference
 ---
 
-# Architecture
+For everyday mailbox tasks, start with the [inbox guide](/docs/inbox-guide); this page explains the server behind those actions.
 
 Angelos has a small, account-specific server boundary. A deployment has one configured mailbox and an explicit list of OAuth subjects allowed to access it. Multiple allowed subjects share that same mailbox; they are not separate mailbox tenants. New prepared-send records and receipt lookups are nevertheless isolated by verified OAuth issuer/resource/subject.
 
@@ -49,4 +49,4 @@ Tools cannot choose arbitrary mail hosts or supply credentials. OAuth access to 
 
 UIDVALIDITY guards against stale message identity. Conditional flag updates use CONDSTORE where supported. Other clients can still modify the account concurrently; there is no global mailbox lock or cross-protocol transaction.
 
-The trusted MCP client handles human confirmation. An exact payload digest ensures consistency between preparation and dispatch, while the durable claim limits a preparation to one dispatch attempt. Neither mechanism guarantees final delivery or proves human consent. See [Safety and concurrency](/docs/safety).
+The trusted MCP client handles human confirmation. An exact payload digest ensures consistency between preparation and dispatch, while the durable claim limits a preparation to one dispatch attempt. Neither mechanism guarantees final delivery or proves human consent. See [Safety and permissions](/docs/safety).

@@ -1,81 +1,35 @@
 ---
 import { getCollection, render } from "astro:content";
-import BaseLayout from "zuedocs/layouts/BaseLayout.astro";
+import SiteLayout from "../../layouts/SiteLayout.astro";
 import DocsPageLayout from "zuedocs/layouts/DocsPageLayout.astro";
-import { docCategories, primaryNav, siteConfig } from "../../data/docs";
-
+import { docCategories, siteConfig } from "../../data/docs";
 const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.order);
-
 export async function getStaticPaths() {
-  const entries = await getCollection("docs");
-  return entries.map((entry) => ({
-    params: { slug: entry.id },
-    props: { entry }
-  }));
+  return (await getCollection("docs")).map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
 }
-
 const { entry } = Astro.props;
 const { Content, headings } = await render(entry);
-
-const grouped = docCategories
-  .map((category) => ({
-    category,
-    entries: docs.filter((doc) => doc.data.category === category)
-  }))
-  .filter((group) => group.entries.length > 0);
+const grouped = docCategories.map((category) => ({ category, entries: docs.filter((doc) => doc.data.category === category) })).filter(group => group.entries.length);
+const index = docs.findIndex(doc => doc.id === entry.id);
+const previous = docs[index - 1];
+const next = docs[index + 1];
+const tocHeadings = headings.filter(heading => heading.depth > 1 && heading.depth < 4);
 ---
-
-<BaseLayout
-  title={`${entry.data.title} | ${siteConfig.name} Docs`}
-  description={entry.data.description}
-  siteConfig={siteConfig}
-  primaryNav={primaryNav}
->
+<SiteLayout title={`${entry.data.title} | ${siteConfig.name} Docs`} description={entry.data.description}>
   <section class="shell docs-shell">
-    <aside class="docs-sidebar">
-      <p class="docs-sidebar__eyebrow">Docs map</p>
-      {grouped.map((group) => (
-        <div class="docs-sidebar__group">
-          <p>{group.category}</p>
-          <ul>
-            {group.entries.map((doc) => (
-              <li>
-                <a
-                  class:list={["docs-sidebar__link", doc.id === entry.id && "is-active"]}
-                  href={`/docs/${doc.id}`}
-                >
-                  {doc.data.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <aside class="docs-sidebar" id="docs-sidebar" aria-label="Documentation navigation">
+      <a class="docs-sidebar__eyebrow" href="/docs">← The handbook</a>
+      {grouped.map(group => (<div class="docs-sidebar__group"><p>{group.category}</p><ul>{group.entries.map(doc => (<li><a class:list={["docs-sidebar__link", doc.id === entry.id && "is-active"]} href={`/docs/${doc.id}`} aria-current={doc.id === entry.id ? "page" : undefined}>{doc.data.title}</a></li>))}</ul></div>))}
     </aside>
-
     <article class="docs-article">
-      <DocsPageLayout
-        title={entry.data.title}
-        description={entry.data.description}
-        category={entry.data.category}
-      >
-        <Content />
-      </DocsPageLayout>
+      {tocHeadings.length > 0 && <details class="docs-mobile-toc"><summary>On this page</summary><ul>{tocHeadings.filter(heading => heading.depth === 2).map(heading => (<li><a href={`#${heading.slug}`}>{heading.text}</a></li>))}</ul></details>}
+      <DocsPageLayout title={entry.data.title} description={entry.data.description} category={entry.data.category}><Content /></DocsPageLayout>
+      <nav class="doc-pagination" aria-label="More documentation">
+        {previous ? <a href={`/docs/${previous.id}`}><span>← Previous</span>{previous.data.title}</a> : <a href="/docs"><span>← Back</span>The handbook</a>}
+        {next ? <a href={`/docs/${next.id}`}><span>Next →</span>{next.data.title}</a> : <a href="/docs"><span>Explore →</span>The handbook</a>}
+      </nav>
     </article>
-
-    <aside class="docs-toc">
-      <p class="docs-toc__eyebrow">On this page</p>
-      <ul>
-        {headings.map((heading) => (
-          <li>
-            <a href={`#${heading.slug}`}>{heading.text}</a>
-          </li>
-        ))}
-      </ul>
-    </aside>
+    <aside class="docs-toc" aria-label="On this page"><p class="docs-toc__eyebrow">On this page</p><ul>{tocHeadings.map(heading => (<li class:list={[heading.depth === 3 && "toc-subheading"]}><a href={`#${heading.slug}`}>{heading.text}</a></li>))}</ul></aside>
   </section>
-</BaseLayout>
-
-<script>
-  import "zuedocs/docsEnhancements";
-</script>
+</SiteLayout>
+<script>import "zuedocs/docsEnhancements";</script>

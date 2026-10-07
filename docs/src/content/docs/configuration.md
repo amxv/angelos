@@ -1,12 +1,12 @@
 ---
-title: Configuration
+title: Configuration reference
 description: Configure one mailbox, TLS endpoints, OAuth access, and optional write features.
 summary: Environment variables for Spacemail, Gmail/Workspace, and generic mail servers.
-order: 40
+order: 41
 category: Reference
 ---
 
-# Configuration
+For a guided first setup, follow [Self-host Angelos](/docs/self-hosting); use this page to look up individual settings.
 
 One Angelos deployment connects to one administrator-configured mailbox. Tool arguments cannot choose a mail server, supply a password, or change the sender account.
 
@@ -57,7 +57,7 @@ Spacemail and custom providers use the existing username/password flow. Gmail ha
 
 ## MCP access
 
-`MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, and `MCP_ALLOWED_SUBJECTS` are required. See [Authentication](/docs/authentication) for their exact constraints and accepted JWT format.
+`MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, and `MCP_ALLOWED_SUBJECTS` are required. See [Set up OAuth access](/docs/authentication) for their exact constraints and accepted JWT format.
 
 ## Optional capabilities
 

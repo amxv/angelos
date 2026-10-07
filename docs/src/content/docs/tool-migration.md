@@ -2,11 +2,11 @@
 title: Migration and token budget
 description: Upgrade existing MCP clients to the compact six-tool interface without losing operations or safety information.
 summary: Six tools now cover 21 operations, with compact message results and read-only inbox workflows.
-order: 55
+order: 45
 category: Reference
 ---
 
-# Migration and token budget
+New integrations can start with the [agent guide](/docs/agent-guide); this page is for upgrading existing clients and measuring their discovery cost.
 
 The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, and **0.6.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
 
@@ -99,7 +99,7 @@ Refresh discovery again for `mail_prepare` action `reply_all`, optional authored
 
 For replies, omitted To/Cc can now be derived from complete source metadata and configured self aliases. Explicit arrays keep replacement semantics; `[]` clears a field and `null` is rejected. Reply quotations are now included by default; set `quote_original: false` to retain an authored-body-only reply. Existing explicitly supplied recipients, full previews, approval digests, and consumed-send behavior remain intact. Review both body alternatives before sending.
 
-See [Natural replies and forwards](/docs/natural-messages) for exact behavior and privacy limits. The version 0.2 size measurements above are historical snapshots; additional version 0.3 functionality remains covered by the repository's compact discovery regression budget.
+See [Reply and forward details](/docs/natural-messages) for exact behavior and privacy limits. The version 0.2 size measurements above are historical snapshots; additional version 0.3 functionality remains covered by the repository's compact discovery regression budget.
 
 
 ## Version 0.4 lookup additions
