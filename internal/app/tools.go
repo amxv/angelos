@@ -24,14 +24,14 @@ type Backend interface {
 }
 
 type queryInput struct {
-	Action     string             `json:"action"`
-	PreparedID string             `json:"prepared_id,omitempty"`
-	References []mail.Reference `json:"references,omitempty" jsonschema:"read_many: 1-10 exact references in input order"`
-	MaxResponseBytes int `json:"max_response_bytes,omitempty" jsonschema:"read_many JSON payload budget: 4096-131072 bytes; default 65536"`
-	Search     mail.SearchRequest `json:"search,omitempty"`
-	Reference  mail.Reference     `json:"reference,omitempty"`
-	Index      int                `json:"index,omitempty" jsonschema:"One-based read attachment index"`
-	Detail     string             `json:"detail,omitempty" jsonschema:"summary (default) or full"`
+	Action           string             `json:"action"`
+	PreparedID       string             `json:"prepared_id,omitempty"`
+	References       []mail.Reference   `json:"references,omitempty" jsonschema:"read_many: 1-10 exact references in input order"`
+	MaxResponseBytes int                `json:"max_response_bytes,omitempty" jsonschema:"read_many JSON payload budget: 4096-131072 bytes; default 65536"`
+	Search           mail.SearchRequest `json:"search,omitempty"`
+	Reference        mail.Reference     `json:"reference,omitempty"`
+	Index            int                `json:"index,omitempty" jsonschema:"One-based read attachment index"`
+	Detail           string             `json:"detail,omitempty" jsonschema:"summary (default) or full"`
 }
 type createInput struct {
 	Action      string         `json:"action"`
@@ -120,6 +120,10 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 	}
 	if p := schema.Properties["detail"]; p != nil {
 		p.Enum = []any{"summary", "full"}
+	}
+	if p := schema.Properties["references"]; p != nil {
+		min, max := 1, maxBatchReferences
+		p.MinItems, p.MaxItems = &min, &max
 	}
 	if p := schema.Properties["operation"]; p != nil {
 		p.Enum = []any{"add", "remove"}
@@ -334,4 +338,3 @@ func (a *App) prepare(ctx context.Context, in prepareInput) (any, error) {
 	}
 	return preview(p), nil
 }
-

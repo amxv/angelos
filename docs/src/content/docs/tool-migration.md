@@ -1,7 +1,7 @@
 ---
 title: Migration and token budget
 description: Upgrade existing MCP clients to the compact six-tool interface without losing operations or safety information.
-summary: Six tools now cover 21 operations, with compact message results and read-only inbox workflows.
+summary: Six tools now cover 22 operations, with compact message results and read-only inbox workflows.
 order: 45
 category: Reference
 ---
@@ -133,3 +133,11 @@ Selected conversation headers are bounded to 64 KiB, 100 IDs, and 1024 bytes per
 Summary flag output stays bounded to 100 entries while preserving standard system flags even when the server lists them after 100 custom keywords. Premature literal-drain races are fixed in ordinary reads, exact-ID search, and conversation header reads; partial provider responses must not be reported as complete matches.
 
 Draft saving is unchanged: it appends a new composed draft. Lossless editing of an existing saved draft is not included in version 0.6.
+
+
+
+## Version 0.7: bounded reads and classified errors
+
+The six tool names now cover 22 operations. `mail_query` adds `read_many` with 1–10 distinct exact references, per-item outcomes, explicit budget/continuation metadata, and summary/full detail. Existing single `read` behavior is unchanged. Application-handler errors gain stable codes and recovery guidance; SDK-level validation remains SDK-formatted. Scopes, deployment gates, annotations, confirmation, exact UIDVALIDITY/MODSEQ, and one-time send semantics are unchanged.
+
+The five-selected-message signed MCP fixture reduces read calls from five to one. Per-item references/status and budget metadata add response bytes; this is a round-trip reduction, not a claim of smaller total output. Discovery remains six tools; the schema-size regression ceiling is now 70% of the original 17-tool baseline to accommodate the bounded reference array. Historical measurements above describe their named releases.

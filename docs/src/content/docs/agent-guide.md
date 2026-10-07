@@ -6,7 +6,7 @@ order: 12
 category: Use your inbox
 ---
 
-Angelos 0.6.0 exposes six MCP tools and 21 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
+Angelos 0.7.0 exposes six MCP tools and 22 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
 
 ## 1. Discover capabilities and permissions
 
@@ -153,3 +153,11 @@ Use `mail_query`, never dispatch as a status probe:
 `accepted` means SMTP acceptance, not delivery. `sending`, `unknown`, persistence warnings, or interrupted responses require investigation, not an automatic retry or duplicate preparation. Failed Sent filing does not undo submission. `expired` and `unavailable` do not prove non-send. Even a `prepared` receipt is not authorization to dispatch.
 
 Keep private content out of logs. Consult [Safety and concurrency](/docs/safety) for client responsibilities and recovery boundaries.
+
+
+
+## Batch reads and recovery
+
+After choosing several exact search/triage/conversation references, use `mail_query` with `action: "read_many"` and `references` to read up to ten messages in one call. Inspect every item's status. Default output is summary detail under a 64 KiB application JSON budget; `detail: "full"` and `max_response_bytes` are optional. A stopped batch includes `next_index` and `stop_reason`; continue only the unfinished input suffix, increasing the budget or using single `read` when one message does not fit. Nothing silently disappears. See [batch limits](/docs/tools#read-selected-messages-in-one-call).
+
+Application errors provide `error_code` and `recovery`. Correcting bad input and refreshing a stale reference are new decisions, not transport retries. Follow `retry.action`, preserve partial outcomes, and never retry mutations or unknown sending automatically. SDK-level schema errors keep their SDK format.

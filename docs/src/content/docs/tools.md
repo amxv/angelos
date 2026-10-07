@@ -14,7 +14,7 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.6.0 exposes six tools for 21 operations: all 17 original operations plus reply-all, read-only send-status inspection, triage, and conversation lookup. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
+Angelos 0.7.0 exposes six tools for 22 operations: all 17 original operations plus reply-all, read-only send-status inspection, triage, conversation lookup, and bounded batch reading. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -39,6 +39,7 @@ Call `mail_query` with one of these actions:
 | `triage` | Optional `search` object below, `detail` | Unread-or-flagged summaries, page-only counts, selection explanation, optional next cursor |
 | `conversation` | `reference`, optional `search` with only `folder`/`order`/`cursor`/`limit`, `detail` | Same-folder header-linked summaries, anchor, coverage explanation, optional next cursor |
 | `read` | `reference`, optional `detail` | Text, selected headers, flags, attachment metadata, truncation warnings |
+| `read_many` | `references`, optional `detail`, `max_response_bytes` | 1–10 distinct exact references; ordered per-item results, bounded payload, explicit continuation |
 | `attachment` | `reference`, one-based `index` | Attachment metadata and complete base64-encoded bytes |
 | `send_status` | `prepared_id` | Your minimal durable send receipt; never sends or claims |
 
@@ -279,3 +280,35 @@ Repeated calls for a consumed ID return its recorded status without another SMTP
 ## Outside the current surface
 
 There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, sorting by subject/sent date, active HTML rendering, bulk global expunge, or folder deletion. Gmail/Workspace has server-side XOAUTH2 with owner-provisioned credentials, not an interactive consent UI. Gmail API transport, label APIs, X-GM-RAW queries, global message/thread IDs, and service-account delegation are not exposed. Other OAuth mail providers require an implementation change. See [Gmail and Google Workspace](/docs/gmail-workspace).
+
+
+
+## Read selected messages in one call
+
+Use `mail_query` action `read_many` after search, triage, or conversation lookup. Supply 1–10 distinct exact `references` in the desired order. It uses the same PEEK read path as `read`, never changes flags or returns attachment contents. The underlying bounded MIME read may fetch attachment bytes; explicit attachment retrieval is still separate. Single-message `read` remains unchanged.
+
+```json
+{
+  "action": "read_many",
+  "references": [
+    {"folder": "INBOX", "uid_validity": 9, "uid": 17},
+    {"folder": "INBOX", "uid_validity": 9, "uid": 18}
+  ],
+  "max_response_bytes": 65536
+}
+```
+
+`detail` defaults to `summary`; use `full` for all available read fields. Summary clipping is still explicit through `text_clipped`, `text_bytes`, and `full_text_hint`; backend MIME incompleteness remains `truncated`.
+
+- `items` preserves input order and every exact reference. `status: "ok"` carries `message`; `"error"` carries a classified `error`. A stale or missing item does not hide other results.
+- `max_response_bytes` bounds the complete UTF-8 JSON application payload, including item metadata: default 65,536, range 4,096–131,072. `response_bytes` measures that payload. MCP transport may include both text and structured copies, so the full wire envelope is larger.
+- The aggregate full-message JSON admitted for output is additionally capped at 1 MiB, reported by `admitted_message_bytes`. One read may cross this admission limit and be omitted; it does not cap total backend downloads or decoding work. Original MIME and attachment transfer limits remain in force. Full batch output retains serialized fields only, not original MIME bytes.
+- On `response_limit` or `message_limit`, the fetched item is `not_returned` and later items are `not_read`. `next_index` is the zero-based first unfinished input index. Resume with `references.slice(next_index)` and a larger budget, smaller batch, or a single `read`; retrying the unchanged too-large item with the same budget will not make progress.
+- Cancellation before a remaining read stops further reads with `stop_reason: "cancelled"` and `next_index`. A cancellation during the final read instead appears as that item’s error; inspect per-item status even when there is no continuation. Review completed per-item results before continuing. Reads are sequential under the existing 90-second request deadline; batching reduces MCP calls, not IMAP connections.
+- Invalid, duplicate, or excessive references fail before mailbox access. If reference metadata alone cannot fit the requested response budget, split the request or raise the budget.
+
+## Classified application errors
+
+Errors reaching the application handler include `error_code`, `recovery`, and `retry` alongside existing `error`, `outcome`, and `retry_safe`. Codes distinguish invalid arguments, stale references, conflicts, missing messages, unsupported operations, safety limits, unavailable service, cancellation/deadline, disabled deployment capabilities, missing scope, unknown outcome, and unclassified operation failure. SDK schema/protocol validation may reject a call earlier using the SDK error format.
+
+`retry.action` describes the next decision (for example `correct_input`, `refresh_reference`, `check_capabilities`, or `verify_outcome`); it is not automatic retry permission. `retry.transport_retry_safe` is false for mutations and unknown outcomes. Inspect `outcome` for partial changes. OAuth scope challenges retain their authentication metadata. Never automatically resend, duplicate a preparation, or bypass consent, deployment, or scope boundaries to recover from an error.

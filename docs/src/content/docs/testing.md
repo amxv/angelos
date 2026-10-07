@@ -76,3 +76,9 @@ A live test is an operation against an actual account. Reading, changing flags, 
 Begin with authentication and read-only checks from [Deploy the API](/docs/deployment). Test writes using disposable messages and folders. A successful SMTP transaction confirms server acceptance, not inbox delivery. Never repeat an uncertain send just to make a test appear successful.
 
 When reporting verification, distinguish checks that passed, checks that failed, checks blocked by the environment, and live integration checks that have not been performed.
+
+
+
+## Agent batch and error fixtures
+
+`TestReadMany*` uses exact-reference fake reads and signed MCP calls to verify input ordering, mixed stale/missing failures, 64-bit MODSEQ fidelity, UTF-8 JSON budgets, explicit continuation, invalid input rejection before backend access, and scope enforcement. `TestReadManyWorkflowMetrics` reports actual complete MCP result bytes and the five-to-one call comparison. `TestToolSchemaTokenBudget` keeps discovery below 70% of the checked-in original 17-tool baseline. Classified error tests cover recovery codes, deployment gates, OAuth metadata, partial outcomes, and conservative mutation/unknown-outcome retry behavior. These tests do not exercise a live mailbox or verify delivery.

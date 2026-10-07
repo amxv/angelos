@@ -7,7 +7,8 @@ The repository is private while under active development and is intended to be o
 ## Capabilities
 
 - Gmail/Workspace XOAUTH2 for personal/internal use, with pinned hosts and conservative Sent/delete safeguards
-- Six risk-separated MCP tools cover 21 operations with compact schemas and optional full-detail message results
+- Six risk-separated MCP tools cover 22 operations with compact schemas and optional full-detail message results
+- Read up to ten selected messages in one bounded call, with explicit per-item errors and continuation
 - Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links
 - Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
 - Inspect provider capabilities, discover folders, search, and read mail without marking it read
@@ -56,3 +57,4 @@ Run `check` before `build`. See [Writing docs](./docs/src/content/docs/writing-d
 ## License
 
 [Apache License 2.0](./LICENSE).
+

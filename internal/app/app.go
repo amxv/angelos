@@ -20,7 +20,7 @@ import (
 )
 
 // Version identifies the public MCP interface and HTTP service build.
-const Version = "0.6.0"
+const Version = "0.7.0"
 
 type Submitter interface {
 	Send(context.Context, mail.Envelope, []byte) (mail.SendResult, error)
@@ -63,17 +63,17 @@ func register[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(c
 			return a.scopeError(scope), nil, nil
 		}
 		if scope == "mail.write" && !a.EnableWrites {
-			return nil, nil, errors.New("mailbox writes are disabled by the server operator")
+			return toolError(deploymentDisabledError("mailbox writes are disabled by the server operator"), nil, false), nil, nil
 		}
 		if scope == "mail.send" && (!a.EnableSend || a.Store == nil) {
-			return nil, nil, errors.New("sending requires explicit server enablement and a durable send store")
+			return toolError(deploymentDisabledError("sending requires explicit server enablement and a durable send store"), nil, false), nil, nil
 		}
 		var in I
 		if e := json.Unmarshal(req.Params.Arguments, &in); e != nil {
-			return nil, nil, errors.New("invalid typed tool arguments")
+			return toolError(invalidArgumentsError(errors.New("invalid typed tool arguments")), nil, t.Annotations.ReadOnlyHint), nil, nil
 		}
 		if e := validateAction(t.Name, req.Params.Arguments); e != nil {
-			return nil, nil, e
+			return toolError(invalidArgumentsError(e), nil, t.Annotations.ReadOnlyHint), nil, nil
 		}
 		// Receipt inspection needs send authority, but never send enablement.
 		// Other query actions keep their existing mail.read-only scope.
@@ -86,16 +86,17 @@ func register[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(c
 		defer cancel()
 		out, e := fn(ctx, in)
 		if e != nil {
-			payload := result{"error": e.Error(), "outcome": out, "retry_safe": t.Annotations.ReadOnlyHint}
-			b, _ := json.Marshal(payload)
-			return &mcp.CallToolResult{IsError: true, StructuredContent: payload, Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}, nil, nil
+			return toolError(e, out, t.Annotations.ReadOnlyHint), nil, nil
 		}
 		return nil, out, nil
 	})
 }
 
 func (a *App) scopeError(scope string) *mcp.CallToolResult {
-	r := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: auth.ErrInsufficientScope.Error()}}}
+	r := toolError(auth.ErrInsufficientScope, nil, false)
+	r.StructuredContent.(result)["required_scope"] = scope
+	// Keep the legacy plain-text scope error and OAuth challenge intact.
+	r.Content = []mcp.Content{&mcp.TextContent{Text: auth.ErrInsufficientScope.Error()}}
 	if a.AuthChallenge != nil {
 		r.Meta = map[string]any{"mcp/www_authenticate": []string{a.AuthChallenge(scope)}}
 	}
@@ -187,7 +188,7 @@ func (a *App) storePreparation(ctx context.Context, p compose.Prepared) error {
 
 func (a *App) sendStatus(ctx context.Context, id string) (any, error) {
 	if a.Store == nil {
-		return nil, errors.New("send status requires a configured durable send store; unavailable status is not proof that no message was sent")
+		return nil, deploymentDisabledError("send status requires a configured durable send store; unavailable status is not proof that no message was sent")
 	}
 	status, err := a.Store.Status(ctx, id, auth.PrincipalBinding(ctx), time.Now())
 	if err != nil {
@@ -217,10 +218,10 @@ func (a *App) authorizeSent(ctx context.Context, in sendInput) error {
 		return errors.New("Gmail SMTP saves Sent automatically; use append_sent=false; no message was sent")
 	}
 	if !a.EnableWrites {
-		return errors.New("Sent filing requires mailbox writes to be enabled; no message was sent")
+		return deploymentDisabledError("Sent filing requires mailbox writes to be enabled; no message was sent")
 	}
 	if e := auth.RequireScope(ctx, "mail.write"); e != nil {
-		return errors.New("Sent filing requires mail.write scope; no message was sent")
+		return &classifiedError{errors.New("Sent filing requires mail.write scope; no message was sent"), "insufficient_scope", "Obtain mail.write authorization for Sent filing, or submit a newly reviewed request with append_sent=false.", "reauthorize"}
 	}
 	return nil
 }
