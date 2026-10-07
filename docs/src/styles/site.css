@@ -32,6 +32,8 @@ button { color: inherit; }
 .brand__name { font-family: var(--font-heading); font-weight: 400; font-size: 2rem; letter-spacing: -.04em; }
 .brand__strapline { font-family: var(--font-sans); font-size: .65rem; letter-spacing: .04em; }
 /* Navigation, GitHub, search and theme controls use the stock ZueDocs styles. */
+/* Keep the search label on one line with our slightly wider DM Sans font. */
+@media (min-width: 769px) { .docs-search { width: 12rem; }.docs-search .pf-trigger-text { white-space: nowrap; } }
 .eyebrow { font-family: var(--font-mono); text-transform: uppercase; font-size: .67rem; font-weight: 400; letter-spacing: .12em; color: var(--signal); line-height: 1.7; }
 .section-label { color: var(--signal); font-size: .68rem; letter-spacing: .1em; }
 .tiny-star { font-size: 1.2rem; line-height: 1; vertical-align: -.13em; margin-right: .45rem; }
