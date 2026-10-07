@@ -22,7 +22,7 @@ Read operations use read-only mailbox selection and body peeks so viewing a mess
 
 ## Inbox discovery is bounded evidence
 
-Triage selects `(unread OR flagged) AND supplied filters`; these flags do not establish urgency, whether a reply is due, or whether work is finished. Its `page_counts` count only returned rows, with unread/flagged overlap. They are not mailbox totals, and flags can change while paging. Do not sum pages as an authoritative snapshot. Standard system flags are retained after the 100-keyword budget is exhausted, so keyword overflow does not hide Seen or Flagged.
+Triage selects `(unread OR flagged) AND supplied filters`; these flags do not establish urgency, whether a reply is due, or whether work is finished. Its `page_counts` count only returned rows, with unread/flagged overlap. They are not mailbox totals, and flags can change while paging. Do not sum pages as an authoritative snapshot. Within the 100-flag summary limit, standard system flags take priority over custom keywords, including when the server lists Seen or Flagged after 100 keywords.
 
 Conversation lookup returns same-folder summaries linked by exact, case-sensitive tokens in Message-ID, References, and In-Reply-To. Its seed is fixed from the anchor; it does not infer links from subjects or expand through newly found messages. A forged or reused header ID can create an apparent link. Missing/malformed headers, other folders, and unvisited pages can hide relevant mail, so even exhausted pagination is not proof of an account-wide complete thread.
 

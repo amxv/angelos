@@ -465,7 +465,7 @@ func TestConversationLargeCompleteSectionAndUnrequestedLiterals(t *testing.T) {
 	f := conversationFixture{headers: map[uint32]string{25: "Message-ID: <" + conversationTestAnchorID + "> (" + strings.Repeat("x", padding) + ")\r\n\r\n"}, candidates: []uint32{25}, trace: &imapTrace{}, unrequested: strings.Repeat("unrequested-private", 65536)}
 	b := backendForTest(t, f.handler, true)
 	// Race instrumentation scans several MiB through a synthetic TLS pipe.
-	b.config.Timeout = 3 * time.Second
+	b.config.Timeout = 10 * time.Second
 	out, err := b.Conversation(context.Background(), conversationTestRef, SearchRequest{})
 	if err != nil || len(out.Messages) != 1 {
 		t.Fatalf("valid bounded header or streaming failed: %+v %v", out, err)

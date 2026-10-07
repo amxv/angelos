@@ -130,6 +130,6 @@ Both new actions use a default limit of 25, maximum 100 rows, and at most one 10
 
 Selected conversation headers are bounded to 64 KiB, 100 IDs, and 1024 bytes per ID. The server-side header prefilter also has a conservative 64 KiB encoded-query cap; exact local verification remains mandatory. Invalid anchors fail, malformed candidates skip, and oversized or incomplete responses fail explicitly. A conversation page is a bounded summary index, not a complete cross-folder thread or a body summary. Read exact references before interpreting message content or preparing a reply. See the [workflow and limitations](/docs/tools#conversation).
 
-Standard system flags remain available after the 100-keyword output budget is exhausted. Premature literal-drain races are fixed in ordinary reads, exact-ID search, and conversation header reads; partial provider responses must not be reported as complete matches.
+Summary flag output stays bounded to 100 entries while preserving standard system flags even when the server lists them after 100 custom keywords. Premature literal-drain races are fixed in ordinary reads, exact-ID search, and conversation header reads; partial provider responses must not be reported as complete matches.
 
 Draft saving is unchanged: it appends a new composed draft. Lossless editing of an existing saved draft is not included in version 0.6.

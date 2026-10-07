@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/emersion/go-imap/v2"
 )
@@ -240,6 +241,8 @@ func TestExactSearchLargeCompleteHeaderAndUnrequestedLiterals(t *testing.T) {
 	trace := &imapTrace{}
 	f := exactSearchFixture{headers: map[uint32]string{2500: "Message-ID: <" + exactTestID + "> (" + strings.Repeat("x", padding) + ")\r\n\r\n"}, candidates: []uint32{2500}, trace: trace, unrequested: strings.Repeat("unrequested-data", 65536)}
 	b := backendForTest(t, f.handler, true)
+	// Allow multi-MiB synthetic TLS streaming under race instrumentation.
+	b.config.Timeout = 10 * time.Second
 	for _, req := range []SearchRequest{{MessageID: exactTestID}, {}} {
 		out, err := b.Search(context.Background(), req)
 		if err != nil || len(out.Messages) != 1 || out.Messages[0].ModSeq != exactTestModSeq {

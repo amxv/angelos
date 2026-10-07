@@ -175,7 +175,7 @@ Preparation requires the send scope, send gate, and durable store but does not s
 
 Summary search, triage, and conversation pages hoist `folder` and `uid_validity` once to the page. Each message has `uid`, subject, addresses when present, date, flags, size, and MODSEQ when available. Construct a reference from the page's folder/UIDVALIDITY plus the row's UID. If a row contains an explicit `reference`, use it instead. `next_cursor`, `scanned_uids`, and `order` keep the same meaning. Empty address lists are omitted. Full mode restores the original per-message `reference` shape and empty fields.
 
-Standard system flags remain available even when a message has exhausted the 100-keyword budget. In particular, keyword overflow does not hide `\Seen` or `\Flagged` and corrupt triage counts. Custom keyword output remains bounded.
+Message summaries retain at most 100 flags, prioritizing standard system flags even when the server lists them after 100 custom keywords. Custom keywords may be displaced so overflow does not hide `\Seen` or `\Flagged` and corrupt triage counts.
 
 Summary reads return at most 4096 UTF-8 text bytes without splitting a character. If clipped, `text_clipped: true`, `text_bytes`, and `full_text_hint` explicitly direct the client to repeat the same read with `detail: "full"`. This presentation clipping is separate from `truncated`, which still reports incomplete MIME/backend data. Full mode restores all available text within the read limits below. An unclipped summary never claims a truncated source is complete.
 
