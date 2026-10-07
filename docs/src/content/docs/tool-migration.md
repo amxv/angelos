@@ -71,6 +71,19 @@ go test ./internal/app -run 'TestToolSchemaTokenBudget|TestSearchSummaryLossless
 
 The discovery test enforces a ceiling of 65% of baseline size, providing room for small safety clarifications while preventing accidental return to the old overhead. Per-action requirements are concise schema descriptions plus strict server-side key checks, rather than large repeated union branches. Clients should use the declared `action` enum and only its documented fields; every call still receives typed JSON Schema validation.
 
+### Version 0.6 discovery measurement
+
+The version 0.6 implementation passes `TestToolSchemaTokenBudget` against the same version 0.1 baseline, with the unchanged 65% discovery-size ceiling. Six tools now cover 21 operations.
+
+| Measurement | Baseline | Version 0.6 | Reduction |
+| --- | ---: | ---: | ---: |
+| Registered tools | 17 | 6 | 64.7% |
+| Complete tool-definition JSON bytes | 14,886 | 9,661 | 35.1% |
+| Input schemas alone, JSON bytes | 7,695 | 6,457 | 16.1% |
+| Approximate discovery tokens, ceil(bytes / 4) | 3,722 | 2,416 | 35.1% |
+
+These are measured compact UTF-8 JSON bytes and a bytes-based token estimate, not tokenizer counts. The earlier search/read payload measurements remain historical fixtures; this table makes no claim about triage or conversation response sizes. Re-run the test after any schema or tool-description change.
+
 ## Safety and completeness
 
 Read-only operations, non-destructive mailbox additions, destructive mailbox changes, irreversible deletion, preparation, and actual sending keep separate tool-level consent annotations. Scopes and deployment gates apply to every action. Permanent deletion and SMTP submission retain separate tools.

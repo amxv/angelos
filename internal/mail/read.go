@@ -379,6 +379,7 @@ func summaryFromBuffer(buf *imapclient.FetchMessageBuffer, folder string, validi
 	}
 	return out
 }
+
 // Keep bounded keyword output without dropping standard read/triage flags.
 func summaryFlags(flags []imap.Flag) []string {
 	out := make([]string, 0, min(len(flags), 100))
@@ -395,14 +396,20 @@ func summaryFlags(flags []imap.Flag) []string {
 		key := strings.ToLower(value)
 		if len(out) < 100 {
 			out = append(out, value)
-			if system(key) { counts[key]++ }
+			if system(key) {
+				counts[key]++
+			}
 			continue
 		}
-		if !system(key) || counts[key] > 0 { continue }
-		for i := len(out)-1; i >= 0; i-- {
+		if !system(key) || counts[key] > 0 {
+			continue
+		}
+		for i := len(out) - 1; i >= 0; i-- {
 			old := strings.ToLower(out[i])
 			if !system(old) || counts[old] > 1 {
-				if system(old) { counts[old]-- }
+				if system(old) {
+					counts[old]--
+				}
 				out[i] = value
 				counts[key]++
 				break
@@ -737,7 +744,9 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 						// Join it instead of re-discarding the failed literal.
 						s.cleanup()
 						s.client.Close()
-						if err == nil { err = ErrUnavailable }
+						if err == nil {
+							err = ErrUnavailable
+						}
 						return out, safeError(err)
 					}
 					if len(raw) > maxMessageBytes {

@@ -65,12 +65,12 @@ type actionRule struct{ required, optional string }
 var actions = map[string]map[string]actionRule{
 	"mail_query": {
 		"capabilities": {}, "folders": {},
-		"search":      {optional: "search detail"},
-		"triage":      {optional: "search detail"},
+		"search":       {optional: "search detail"},
+		"triage":       {optional: "search detail"},
 		"conversation": {required: "reference", optional: "search detail"},
-		"read":        {required: "reference", optional: "detail"},
-		"attachment":  {required: "reference index"},
-		"send_status": {required: "prepared_id"},
+		"read":         {required: "reference", optional: "detail"},
+		"attachment":   {required: "reference index"},
+		"send_status":  {required: "prepared_id"},
 	},
 	"mail_create": {
 		"folder": {required: "name"},
@@ -182,11 +182,15 @@ func validateAction(name string, raw json.RawMessage) error {
 	if name == "mail_query" && (action == "conversation" || action == "triage") {
 		var filters map[string]json.RawMessage
 		if raw, present := fields["search"]; present {
-			if err := json.Unmarshal(raw, &filters); err != nil { return errors.New("invalid search fields") }
+			if err := json.Unmarshal(raw, &filters); err != nil {
+				return errors.New("invalid search fields")
+			}
 		}
 		if action == "conversation" {
 			for key := range filters {
-				if key != "folder" && key != "order" && key != "cursor" && key != "limit" { return fmt.Errorf("conversation does not accept search.%s", key) }
+				if key != "folder" && key != "order" && key != "cursor" && key != "limit" {
+					return fmt.Errorf("conversation does not accept search.%s", key)
+				}
 			}
 		} else if raw, present := filters["attention"]; present && !bytes.Equal(bytes.TrimSpace(raw), []byte("true")) {
 			return errors.New("triage always selects unread OR flagged; omit search.attention or set it true")
@@ -248,11 +252,15 @@ func (a *App) query(ctx context.Context, in queryInput) (any, error) {
 	case "triage":
 		in.Search.Attention = true
 		v, e := a.Mail.Search(ctx, in.Search)
-		if e != nil { return v, e }
+		if e != nil {
+			return v, e
+		}
 		return triageSummary(v, in.Search.Folder, in.Detail), nil
 	case "conversation":
 		v, e := a.Mail.Conversation(ctx, in.Reference, in.Search)
-		if e != nil { return v, e }
+		if e != nil {
+			return v, e
+		}
 		return conversationSummary(v, in.Reference, in.Detail), nil
 	case "search":
 		v, e := a.Mail.Search(ctx, in.Search)
