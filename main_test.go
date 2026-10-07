@@ -123,7 +123,8 @@ func TestCanonicalHostIgnoresNoUntrustedOrigin(t *testing.T) {
 		{"api.angelos.ashray.xyz:443", "", "", 400},
 		{"api.angelos.ashray.xyz", "X-Forwarded-Host", "attacker.example", 400},
 		{"api.angelos.ashray.xyz", "X-Forwarded-Proto", "http", 400},
-		{"api.angelos.ashray.xyz", "Forwarded", "host=attacker.example;proto=https", 400},
+		// RFC 7239 Forwarded is ignored, not trusted for canonical origin decisions.
+		{"api.angelos.ashray.xyz", "Forwarded", "host=attacker.example;proto=http", 204},
 		{"api.angelos.ashray.xyz", "X-Forwarded-Proto", "https", 204},
 	} {
 		r := httptest.NewRequest("GET", "http://"+test.host+"/mcp", nil)
@@ -136,15 +137,13 @@ func TestCanonicalHostIgnoresNoUntrustedOrigin(t *testing.T) {
 			t.Fatalf("%+v status=%d", test, w.Code)
 		}
 	}
-	for _, header := range []string{"X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded"} {
+	for _, header := range []string{"X-Forwarded-Host", "X-Forwarded-Proto"} {
 		r := httptest.NewRequest("GET", "https://api.angelos.ashray.xyz/mcp", nil)
 		switch header {
 		case "X-Forwarded-Host":
 			r.Header[header] = []string{"api.angelos.ashray.xyz", "attacker.example"}
 		case "X-Forwarded-Proto":
 			r.Header[header] = []string{"https", "http"}
-		default:
-			r.Header[header] = []string{""}
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)

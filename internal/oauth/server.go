@@ -100,9 +100,9 @@ func canonicalRequest(r *http.Request) bool {
 	if r.Host != host || (r.URL.Scheme != "" && r.URL.Scheme != "https") || (r.URL.Host != "" && r.URL.Host != host) {
 		return false
 	}
-	if len(r.Header.Values("Forwarded")) != 0 {
-		return false
-	}
+	// Vercel includes Forwarded on every request. Deliberately ignore it rather
+	// than interpreting untrusted proxy claims; Host and X-Forwarded-* are
+	// independently validated against the fixed first-party issuer above.
 	for name, want := range map[string]string{"X-Forwarded-Host": host, "X-Forwarded-Proto": "https"} {
 		values := r.Header.Values(name)
 		if len(values) > 1 || (len(values) == 1 && values[0] != want) {

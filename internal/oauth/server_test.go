@@ -471,7 +471,7 @@ func TestCoreFailClosedAndCanonicalRequest(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	m.fail = false
-	for _, tc := range []struct{ host, header, value string }{{"evil.example.com", "", ""}, {"api.angelos.ashray.xyz:443", "", ""}, {"api.angelos.ashray.xyz", "X-Forwarded-Host", "evil.example.com"}, {"api.angelos.ashray.xyz", "X-Forwarded-Proto", "http"}, {"api.angelos.ashray.xyz", "Forwarded", "host=evil.example.com"}, {"api.angelos.ashray.xyz", "X-Forwarded-Host", "api.angelos.ashray.xyz,evil.example.com"}} {
+	for _, tc := range []struct{ host, header, value string }{{"evil.example.com", "", ""}, {"api.angelos.ashray.xyz:443", "", ""}, {"api.angelos.ashray.xyz", "X-Forwarded-Host", "evil.example.com"}, {"api.angelos.ashray.xyz", "X-Forwarded-Proto", "http"}, {"api.angelos.ashray.xyz", "X-Forwarded-Host", "api.angelos.ashray.xyz,evil.example.com"}} {
 		r := httptest.NewRequest("GET", Issuer+MetadataPath, nil)
 		r.Host = tc.host
 		if tc.header != "" {
@@ -482,6 +482,16 @@ func TestCoreFailClosedAndCanonicalRequest(t *testing.T) {
 		if w.Code != 400 {
 			t.Fatal("forged proxy/host accepted", tc, w.Code)
 		}
+	}
+
+	// Vercel adds Forwarded even for legitimate canonical requests. Values from
+	// this untrusted header must not change the fixed issuer in OAuth metadata.
+	r := httptest.NewRequest("GET", Issuer+MetadataPath, nil)
+	r.Header.Set("Forwarded", "for=192.0.2.1;host=evil.example.com;proto=http")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), Issuer) {
+		t.Fatal("Forwarded header affected fixed issuer", w.Code, w.Body.String())
 	}
 }
 

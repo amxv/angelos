@@ -106,7 +106,10 @@ func newHandler() http.Handler {
 
 func canonicalHost(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "api.angelos.ashray.xyz" || (r.URL.Host != "" && r.URL.Host != r.Host) || len(r.Header.Values("Forwarded")) != 0 {
+		// Vercel injects the RFC 7239 Forwarded header on legitimate requests.
+		// It is never trusted for issuer, origin, host, or redirect decisions;
+		// validate the actual Host and platform-normalized forwarding headers.
+		if r.Host != "api.angelos.ashray.xyz" || (r.URL.Host != "" && r.URL.Host != r.Host) {
 			http.Error(w, "invalid host", http.StatusBadRequest)
 			return
 		}
