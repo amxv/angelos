@@ -8,7 +8,7 @@ category: Reference
 
 New integrations can start with the [agent guide](/docs/agent-guide); this page is for upgrading existing clients and measuring their discovery cost.
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, and **0.6.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, **0.6.0**, and **0.7.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
 
 ## Operation parity
 
@@ -140,4 +140,4 @@ Draft saving is unchanged: it appends a new composed draft. Lossless editing of 
 
 The six tool names now cover 22 operations. `mail_query` adds `read_many` with 1–10 distinct exact references, per-item outcomes, explicit budget/continuation metadata, and summary/full detail. Existing single `read` behavior is unchanged. Application-handler errors gain stable codes and recovery guidance; SDK-level validation remains SDK-formatted. Scopes, deployment gates, annotations, confirmation, exact UIDVALIDITY/MODSEQ, and one-time send semantics are unchanged.
 
-The five-selected-message signed MCP fixture reduces read calls from five to one. Per-item references/status and budget metadata add response bytes; this is a round-trip reduction, not a claim of smaller total output. Discovery remains six tools; the schema-size regression ceiling is now 70% of the original 17-tool baseline to accommodate the bounded reference array. Historical measurements above describe their named releases.
+The five-selected-message signed MCP fixture reduces read calls from five to one. Complete MCP result JSON grows from 10,760 to 11,708 bytes in that fixture; discovery grows from 9,661 bytes in 0.6 to 10,341 bytes in 0.7. Per-item references/status and budget metadata add response bytes; this is a round-trip reduction, not a claim of smaller total output. Discovery remains six tools; the schema-size regression ceiling is now 70% of the original 17-tool baseline to accommodate the bounded reference array. Historical measurements above describe their named releases.
