@@ -48,7 +48,11 @@ func backendForTest(t *testing.T, handler func(net.Conn), implicit bool) *Backen
 		client, server := net.Pipe()
 		go func() {
 			defer server.Close()
-			server.SetDeadline(time.Now().Add(3 * time.Second))
+			// Share the operation's budget: streaming tests deliberately allow
+			// longer deadlines for multi-MiB TLS transfers under -race.
+			if deadline, ok := ctx.Deadline(); ok {
+				server.SetDeadline(deadline)
+			}
 			var conn net.Conn = server
 			if implicit {
 				conn = tls.Server(server, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
