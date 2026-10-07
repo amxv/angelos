@@ -39,6 +39,23 @@ Status/search regressions cover signed OAuth principal isolation and challenges,
 
 Gmail tests use synthetic Google-host TLS certificates and injected loopback transports, never real accounts or refresh grants. Coverage includes IMAP with/without SASL-IR, SMTP TLS/STARTTLS, exact XOAUTH2 payloads, challenge termination, no credential downgrade, verified TLS before credentials, token refresh expiry/cancellation/concurrency/response bounds/redaction, and generation-safe invalidation. Signed MCP fixtures verify duplicate-Sent rejection before claim, one SMTP dispatch without explicit Sent APPEND, deletion guards, localized LIST roles, native MOVE requirements, and preserved legacy-provider behavior.
 
+## Inbox workflow regressions
+
+The inbox test suite covers the two new query routes through signed OAuth/MCP requests as well as bounded TLS IMAP fixtures. Check these behaviors when changing triage or conversation code:
+
+- Read-only scope enforcement, compact/full rows, exact references and MODSEQ values, and rejection of unsupported fields before mailbox access
+- Attention selection as `(unread OR flagged) AND other filters`, explicit true/false flag constraints, forced triage attention, and page-only overlapping counts
+- Standard system flags retained after 100 custom keywords, so overflow cannot hide Seen/Flagged or alter page counts
+- Default/max row limits, one bounded UID window, sparse and empty pages, both UID orders, frozen upper bounds, and compatibility with older non-attention cursors
+- Exact case-sensitive Message-ID/References/In-Reply-To linkage to a fixed anchor seed, with no subject fallback or recursive expansion
+- Bounded server-side header prefilter, conservative 64 KiB encoded-query cap, and exact local verification of candidates rather than substring acceptance
+- Conversation cursor binding to operation, anchor, seed, order, and UIDVALIDITY; no reuse across search and conversation
+- Malformed anchors/candidates, duplicate fields, bounded ID/header lengths, incomplete provider responses, missing/expunged messages, and failure without a successful partial parse
+- Premature literal-drain race regressions in ordinary read, exact-ID search, and conversation paths, run under the race detector
+- Selected-header PEEK, no body fetch during triage/conversation, no Seen change, and no mailbox mutation or SMTP dispatch
+
+Use synthetic headers, bodies, and credentials. Passing fixture tests does not validate a real provider's threading behavior or establish complete conversation coverage across folders. Current discovery cost must be measured from `TestToolSchemaTokenBudget`; the version 0.2 table in [Migration and token budget](/docs/tool-migration) is historical.
+
 ## Documentation checks
 
 Run the required commands serially:

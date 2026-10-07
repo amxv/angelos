@@ -257,6 +257,12 @@ func (b *Backend) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 			{Or: [][2]imap.SearchCriteria{{header("To"), header("Cc")}}},
 		})
 	}
+	if req.Attention {
+		criteria.Or = append(criteria.Or, [2]imap.SearchCriteria{
+			{NotFlag: []imap.Flag{imap.FlagSeen}},
+			{Flag: []imap.Flag{imap.FlagFlagged}},
+		})
+	}
 	if req.Unread != nil {
 		if *req.Unread {
 			criteria.NotFlag = append(criteria.NotFlag, imap.FlagSeen)
@@ -362,12 +368,7 @@ func (b *Backend) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 }
 func summaryFromBuffer(buf *imapclient.FetchMessageBuffer, folder string, validity uint32) Summary {
 	out := Summary{Reference: Reference{Folder: folder, UIDValidity: validity, UID: uint32(buf.UID)}, From: []Address{}, To: []Address{}, Flags: []string{}, Size: buf.RFC822Size, Date: buf.InternalDate, ModSeq: buf.ModSeq}
-	for i, f := range buf.Flags {
-		if i >= 100 {
-			break
-		}
-		out.Flags = append(out.Flags, cleanHeader(string(f), 256))
-	}
+	out.Flags = summaryFlags(buf.Flags)
 	if e := buf.Envelope; e != nil {
 		out.Subject = cleanHeader(e.Subject, 4096)
 		out.From = addresses(e.From)
@@ -378,6 +379,39 @@ func summaryFromBuffer(buf *imapclient.FetchMessageBuffer, folder string, validi
 	}
 	return out
 }
+// Keep bounded keyword output without dropping standard read/triage flags.
+func summaryFlags(flags []imap.Flag) []string {
+	out := make([]string, 0, min(len(flags), 100))
+	counts := make(map[string]int, 6)
+	system := func(flag string) bool {
+		switch flag {
+		case `\seen`, `\flagged`, `\answered`, `\draft`, `\deleted`, `\recent`:
+			return true
+		}
+		return false
+	}
+	for _, flag := range flags {
+		value := cleanHeader(string(flag), 256)
+		key := strings.ToLower(value)
+		if len(out) < 100 {
+			out = append(out, value)
+			if system(key) { counts[key]++ }
+			continue
+		}
+		if !system(key) || counts[key] > 0 { continue }
+		for i := len(out)-1; i >= 0; i-- {
+			old := strings.ToLower(out[i])
+			if !system(old) || counts[old] > 1 {
+				if system(old) { counts[old]-- }
+				out[i] = value
+				counts[key]++
+				break
+			}
+		}
+	}
+	return out
+}
+
 func addresses(in []imap.Address) []Address {
 	out := make([]Address, 0)
 	for i, a := range in {
@@ -579,6 +613,13 @@ func fetchSearchSummaries(s *imapSession, folder string, validity uint32, uids [
 		cmd.Close()
 		return nil, safeError(err)
 	}
+	// A failed/short literal has released the decoder. Join it without asking
+	// command Close to re-read the exhausted literal concurrently.
+	failLiteral := func(err error) ([]Summary, error) {
+		s.cleanup()
+		s.client.Close()
+		return nil, safeError(err)
+	}
 	out := make([]Summary, 0, len(uids))
 	seen := make(map[imap.UID]bool, len(uids))
 	for data := cmd.Next(); data != nil; data = cmd.Next() {
@@ -618,10 +659,10 @@ func fetchSearchSummaries(s *imapSession, folder string, validity uint32, uids [
 				}
 				raw, err := io.ReadAll(io.LimitReader(v.Literal, maxSearchIDHeaderBytes+1))
 				if err != nil {
-					return fail(err)
+					return failLiteral(err)
 				}
 				if int64(len(raw)) != v.Literal.Size() {
-					return fail(ErrUnavailable)
+					return failLiteral(ErrUnavailable)
 				}
 				exact, err = exactSearchMessageID(raw, messageID)
 				if err != nil {
@@ -691,9 +732,12 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 				gotBody = true
 				if v.Literal != nil {
 					raw, err = io.ReadAll(io.LimitReader(v.Literal, maxMessageBytes+1))
-					if err != nil {
+					if err != nil || len(raw) <= maxMessageBytes && int64(len(raw)) != v.Literal.Size() {
+						// Premature EOF/error has released the protocol decoder.
+						// Join it instead of re-discarding the failed literal.
 						s.cleanup()
-						cmd.Close()
+						s.client.Close()
+						if err == nil { err = ErrUnavailable }
 						return out, safeError(err)
 					}
 					if len(raw) > maxMessageBytes {

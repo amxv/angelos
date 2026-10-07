@@ -14,7 +14,7 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.5.0 exposes six tools for all 17 original operations plus reply-all and read-only send-status inspection. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
+Angelos 0.6.0 exposes six tools for 21 operations: all 17 original operations plus reply-all, read-only send-status inspection, triage, and conversation lookup. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -36,11 +36,13 @@ Call `mail_query` with one of these actions:
 | `capabilities` | None | IMAP capabilities, discovered special folders, effective gates, Gmail label/Sent/delete constraints |
 | `folders` | None | Exact folder names, hierarchy delimiters, attributes |
 | `search` | Optional `search` object below, `detail` | Message summaries, UIDVALIDITY, scan size, optional next cursor |
+| `triage` | Optional `search` object below, `detail` | Unread-or-flagged summaries, page-only counts, selection explanation, optional next cursor |
+| `conversation` | `reference`, optional `search` with only `folder`/`order`/`cursor`/`limit`, `detail` | Same-folder header-linked summaries, anchor, coverage explanation, optional next cursor |
 | `read` | `reference`, optional `detail` | Text, selected headers, flags, attachment metadata, truncation warnings |
 | `attachment` | `reference`, one-based `index` | Attachment metadata and complete base64-encoded bytes |
 | `send_status` | `prepared_id` | Your minimal durable send receipt; never sends or claims |
 
-`detail` accepts `summary` (default) or `full` for search/read only. Full mode returns every field in the original read/search response. Capability, folder, attachment, mutation, preparation, and dispatch results retain their previous full shapes.
+`detail` accepts `summary` (default) or `full` for search, triage, conversation, and read. Full mode returns every field in the original message-summary or read response. Full triage/conversation rows still contain summaries, not bodies. Capability, folder, attachment, mutation, preparation, and dispatch results retain their previous full shapes.
 
 ### Message identity
 
@@ -58,7 +60,7 @@ The numbers above are illustrative. A stale UIDVALIDITY or a missing message req
 
 ### Search
 
-The nested `search.folder` defaults to `INBOX`; an omitted `search` performs the default search. `query` is a plain IMAP text-search term, not a Gmail query language or arbitrary IMAP command. Optional `from`, `to`, and `subject` fields add header filters. `participant` is IMAP case-insensitive substring matching across From, Reply-To, To, or Cc (not Bcc). `message_id` is an exact case-sensitive complete Message-ID filter, verified against the original header rather than trusting IMAP substring search. `since` and `before` use `YYYY-MM-DD` IMAP internal-date boundaries; `since` is inclusive and `before` is exclusive. Optional `unread` and `flagged` booleans filter those flags. Supplied filters are combined.
+The nested `search.folder` defaults to `INBOX`; an omitted `search` performs the default search. `query` is a plain IMAP text-search term, not a Gmail query language or arbitrary IMAP command. Optional `from`, `to`, and `subject` fields add header filters. `participant` is IMAP case-insensitive substring matching across From, Reply-To, To, or Cc (not Bcc). `message_id` is an exact case-sensitive complete Message-ID filter, verified against the original header rather than trusting IMAP substring search. `since` and `before` use `YYYY-MM-DD` IMAP internal-date boundaries; `since` is inclusive and `before` is exclusive. Optional `unread` and `flagged` booleans filter those flags. `attention: true` adds `(unread OR flagged)`; all other supplied filters, including explicit `unread` and `flagged` values, are combined with it by AND. Omitted or false `attention` adds no attention filter. It is a flag selection, not an urgency score.
 
 ```json
 {
@@ -93,9 +95,87 @@ Exact-ID inputs accept modern ASCII dot-atom IDs or no-fold domain literals, wit
 
 These filters combine with each other and earlier criteria by AND. Participant search may match display names or a substring of an address; it is not an exact-address operator. Message-ID case is never normalized.
 
+### Triage
+
+`mail_query` action `triage` applies the existing search filters and forces `attention: true`: `(unread OR flagged) AND all supplied filters`. Omit `search.attention` or set it to `true`; `false` is rejected. Explicit flag filters still narrow the selection. For example, `unread: false` selects read messages that are flagged; `flagged: false` selects unread messages that are not flagged. Ordinary `action: "search"` also accepts `attention: true`, without adding triage counts.
+
+The result adds `selection` and `page_counts`:
+
+- `messages`: number of returned rows
+- `unread`: returned rows without `\Seen`
+- `flagged`: returned rows with `\Flagged`
+- `unread_and_flagged`: returned rows in both groups
+
+These counts overlap. They describe only the rows returned in this call, not all matches in the scanned window, folder totals, pending work, or urgency. Flags can change between pages.
+
+Triage uses one bounded search call, defaults to 25 rows, allows at most 100 rows, and scans at most 1000 UID values per call. It returns summary metadata without fetching message bodies or changing Seen or other mailbox state. Continue with the returned cursor and unchanged filters/order, even when a page is empty. The initial upper UID bound stays frozen; start a fresh query to include new arrivals. Search cursors created before the attention field existed remain valid for their unchanged, non-attention searches.
+
+### Conversation
+
+`mail_query` action `conversation` requires an exact anchor `reference`. Its optional `search` object accepts only `folder`, `order`, `cursor`, and `limit`. Omit or leave `folder` empty to use the anchor's folder; an explicit folder must match it exactly. Query, participant, date, flag, attention, and Message-ID filters are rejected, even when supplied as empty or false values.
+
+The backend fetches only the anchor's Message-ID, References, and In-Reply-To headers with PEEK, then fixes that identifier set for the lookup. A candidate in the same folder matches if any complete token in its own selected headers exactly matches that fixed set. Matching is case-sensitive. There is no subject fallback, provider thread-ID lookup, or recursive expansion through newly found messages. A shared subject alone does not establish a conversation, and headers are untrusted claims rather than proof of identity.
+
+A server-side header prefilter narrows candidates within the bounded UID window, but every returned match still passes exact local token verification. IMAP substring matches alone never establish linkage. A conservative 64 KiB encoded-query cap bounds the prefilter; queries exceeding the cap fail explicitly rather than sending an oversized command or weakening verification.
+
+The result uses the same compact/full summary rows as search, plus the exact `anchor` and a `coverage` explanation. It does not fetch bodies. Use `read` on the exact returned references for content, including when asking for a conversation summary. The anchor need not appear on every page. Other folders, missing or malformed links, and unvisited pages are not covered; even exhausted pagination does not establish a complete account-wide thread.
+
+Each selected-header section is limited to 64 KiB, with at most 100 IDs across its three fields and at most 1024 bytes per ID. Parsing accepts complete modern IDs and supported surrounding comments/folding. Duplicate fields and malformed identifiers are invalid: an invalid anchor or an anchor with no usable IDs fails the lookup, while invalid candidates are skipped. Oversized headers/IDs or incomplete returned header sections fail explicitly instead of returning a successful partial parse. Concurrently expunged candidates may be skipped; a missing anchor fails.
+
+The default limit is 25, the maximum is 100 rows, and each call scans at most one 1000-UID window. `newest` (default) and `oldest` mean UID order. Follow `next_cursor` even after an empty page. A conversation cursor binds the operation, exact anchor, fixed ID-set digest, order, UIDVALIDITY, and initial upper UID bound. Do not reuse a search/triage cursor or change anchors. An altered anchor ID set or stale mailbox generation requires a fresh lookup; new arrivals require one too. Neither triage nor conversation changes flags or performs mailbox writes.
+
+### Inbox workflow example
+
+The following calls illustrate a read-first workflow. The reference values and reply text are examples; use the exact values and content appropriate to the returned mail.
+
+1. Ask `mail_query` for an attention page:
+
+```json
+{
+  "action": "triage",
+  "search": {"folder": "INBOX", "limit": 25}
+}
+```
+
+2. Choose a row and ask `mail_query` for related summaries. In compact results, combine the page's `folder` and `uid_validity` with the row's `uid`, unless the row supplies an explicit `reference`:
+
+```json
+{
+  "action": "conversation",
+  "reference": {"folder": "INBOX", "uid_validity": 12345, "uid": 678},
+  "search": {"order": "oldest", "limit": 25}
+}
+```
+
+Keep the same anchor and order for later conversation pages and place that response's `next_cursor` in `search.cursor`.
+
+3. Read the relevant exact reference with `mail_query`; repeat for other messages needed to understand the exchange:
+
+```json
+{
+  "action": "read",
+  "reference": {"folder": "INBOX", "uid_validity": 12345, "uid": 678},
+  "detail": "full"
+}
+```
+
+4. When authorized to prepare a response, call `mail_prepare`:
+
+```json
+{
+  "action": "reply",
+  "reference": {"folder": "INBOX", "uid_validity": 12345, "uid": 678},
+  "message": {"text": "Thanks for the update."}
+}
+```
+
+Preparation requires the send scope, send gate, and durable store but does not send. Review the derived recipients, complete text/HTML, quoted source, attachments, and warnings before any separate `mail_send_confirmed` call. Nothing about triage or conversation lookup authorizes sending or marks an item handled.
+
 ### Compact results
 
-Summary search pages hoist `folder` and `uid_validity` once to the page. Each message has `uid`, subject, addresses when present, date, flags, size, and MODSEQ when available. Construct a reference from the page's folder/UIDVALIDITY plus the row's UID. If a row contains an explicit `reference`, use it instead. `next_cursor`, `scanned_uids`, and `order` keep the same meaning. Empty address lists are omitted. Full mode restores the original per-message `reference` shape and empty fields.
+Summary search, triage, and conversation pages hoist `folder` and `uid_validity` once to the page. Each message has `uid`, subject, addresses when present, date, flags, size, and MODSEQ when available. Construct a reference from the page's folder/UIDVALIDITY plus the row's UID. If a row contains an explicit `reference`, use it instead. `next_cursor`, `scanned_uids`, and `order` keep the same meaning. Empty address lists are omitted. Full mode restores the original per-message `reference` shape and empty fields.
+
+Standard system flags remain available even when a message has exhausted the 100-keyword budget. In particular, keyword overflow does not hide `\Seen` or `\Flagged` and corrupt triage counts. Custom keyword output remains bounded.
 
 Summary reads return at most 4096 UTF-8 text bytes without splitting a character. If clipped, `text_clipped: true`, `text_bytes`, and `full_text_hint` explicitly direct the client to repeat the same read with `detail: "full"`. This presentation clipping is separate from `truncated`, which still reports incomplete MIME/backend data. Full mode restores all available text within the read limits below. An unclipped summary never claims a truncated source is complete.
 
@@ -149,7 +229,7 @@ Where CONDSTORE is available, read/search results include `modseq`, and the serv
 
 Move and Trash require native MOVE support. Trash and implicit Drafts/Sent folder selection require a unique server-advertised SPECIAL-USE folder. Names are never guessed. Actual LIST role attributes are honored even without a SPECIAL-USE capability advertisement. Gmail labels overlap, and All Mail is not treated as Archive. A copy/move with server acceptance but no valid destination UID mapping returns `accepted` and a verification warning: a concurrently disappeared source can make the command an accepted no-op. Search the destination before taking another action. An append without a returned UID similarly requires a fresh search.
 
-Draft saving creates a new message and does not replace an older draft. Its `message` uses the composition shape below. BCC is preserved in the private IMAP draft so another mail client can edit it. An omitted folder selects the discovered Drafts folder. Updating a draft is a deliberate new-save and separate old-message cleanup, with possible concurrent-client effects.
+Draft saving creates a new message and does not replace an older draft. Lossless opening and editing of an existing saved draft is not supported; read output is not a complete editable reconstruction of its original MIME. Its `message` uses the composition shape below. BCC is preserved in the private IMAP draft so another mail client can edit it. An omitted folder selects the discovered Drafts folder. Updating a draft is a deliberate new-save and separate old-message cleanup, with possible concurrent-client effects.
 
 Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-action user confirmation in the trusted client, and targeted UID EXPUNGE support. There is no ordinary mailbox-wide EXPUNGE, folder deletion, or deletion-on-close operation. An interrupted delete can leave a message marked Deleted without confirmed removal; inspect the account before retrying. Gmail/Workspace permanent deletion is unavailable even with that gate: its label UID removal does not prove account-wide deletion. The Gmail preset, known Gmail IMAP hosts, and servers advertising X-GM-EXT-1 are guarded before Deleted/EXPUNGE mutation.
 

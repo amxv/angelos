@@ -1,14 +1,14 @@
 ---
 title: Migration and token budget
 description: Upgrade existing MCP clients to the compact six-tool interface without losing operations or safety information.
-summary: Version 0.2 groups 17 operations by permission and risk, with opt-in full read/search detail.
+summary: Six tools now cover 21 operations, with compact message results and read-only inbox workflows.
 order: 55
 category: Reference
 ---
 
 # Migration and token budget
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, and **0.5.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, and **0.6.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
 
 ## Operation parity
 
@@ -45,6 +45,8 @@ For example, the exact full read is now:
 Reference values are illustrative, not reusable mailbox identifiers.
 
 ## Discovery and response cost
+
+The table below is a historical version 0.2 snapshot, not a version 0.6 measurement. Re-run the metric checks on the exact revision when assessing current discovery cost.
 
 The baseline is the actual `tools/list` tools array from commit `21269903054ca3e7331e80fa46fce9325bd40b65` (same Go interface as 0.1.0), captured through the real stateless MCP HTTP handler. The checked-in baseline fixture and `TestToolSchemaTokenBudget` make the comparison reproducible.
 
@@ -101,3 +103,20 @@ The six tools and 19 operations remain unchanged. Refresh discovery for Gmail-sp
 Capabilities now include `server.gmail_labels`, `server.permanent_delete`, and `server.smtp_stores_sent`, plus top-level `smtp_stores_sent` and an applicable `permanent_delete_restriction`. Top-level `permanent_delete_enabled` reflects write/delete gates and safe provider support, rather than only the configured delete switch. UID EXPUNGE support alone does not imply Gmail permanent-delete availability.
 
 Gmail callers must pass `append_sent: false`; true is rejected before claim/SMTP. Gmail permanent deletion is disabled regardless of the gate. Special roles are discovered from LIST attributes even when SPECIAL-USE is not advertised; All Mail is not guessed as Archive. No Gmail label or raw-search dialect is added.
+
+
+## Version 0.6 inbox workflows
+
+Refresh discovery for `mail_query` actions `triage` and `conversation`, and the optional search boolean `attention`. The six tool names now cover 21 operations; earlier routes, permission boundaries, scopes, and gates remain unchanged.
+
+- `triage` accepts optional `search` and `detail`. It forces `(unread OR flagged) AND other supplied filters`, rejecting explicit `attention: false`. Explicit `unread` or `flagged` filters remain AND constraints. The result adds `selection` and overlapping `page_counts` for returned rows only: `messages`, `unread`, `flagged`, and `unread_and_flagged`. These are neither folder totals nor urgency scores.
+- Ordinary `search` accepts `attention: true` with the same selection and no triage-specific counts. Omission/false preserves earlier search behavior and cursor serialization. Cursors from searches that predate the field remain valid with their original filters/order.
+- `conversation` requires an exact `reference`; optional `search` permits only `folder`, `order`, `cursor`, and `limit`. The folder must be empty/omitted or match the anchor exactly. Its result adds `anchor` and `coverage` to compact/full summary rows. It fixes the ID set from the anchor's Message-ID, References, and In-Reply-To and matches same-folder header tokens exactly, preserving case. It never expands recursively or matches by subject.
+
+Both new actions use a default limit of 25, maximum 100 rows, and at most one 1000-UID scan window per call. Both are read-only and fetch no message bodies or change Seen. Continue on empty pages when a cursor is present. Conversation cursors are separate from search/triage cursors and bind the operation, exact anchor, seed digest, order, mailbox generation, and frozen upper UID bound. New arrivals need a fresh lookup.
+
+Selected conversation headers are bounded to 64 KiB, 100 IDs, and 1024 bytes per ID. The server-side header prefilter also has a conservative 64 KiB encoded-query cap; exact local verification remains mandatory. Invalid anchors fail, malformed candidates skip, and oversized or incomplete responses fail explicitly. A conversation page is a bounded summary index, not a complete cross-folder thread or a body summary. Read exact references before interpreting message content or preparing a reply. See the [workflow and limitations](/docs/tools#conversation).
+
+Standard system flags remain available after the 100-keyword output budget is exhausted. Premature literal-drain races are fixed in ordinary reads, exact-ID search, and conversation header reads; partial provider responses must not be reported as complete matches.
+
+Draft saving is unchanged: it appends a new composed draft. Lossless editing of an existing saved draft is not included in version 0.6.

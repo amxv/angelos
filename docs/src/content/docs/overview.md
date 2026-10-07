@@ -10,11 +10,12 @@ category: Start
 
 Angelos gives an agent a scoped interface to one existing IMAP/SMTP mailbox. It runs as an OAuth-protected remote MCP server written in Go. Apple Mail and other IMAP clients can remain connected to the same account.
 
-Version 0.5.0 groups 19 operations into six MCP tools and adds Gmail/Workspace support through server-side XOAUTH2. See [Migration and token budget](/docs/tool-migration) for the client contract and [Gmail and Google Workspace](/docs/gmail-workspace) for provider setup and limits.
+Version 0.6.0 groups 21 operations into six MCP tools. It adds read-only inbox triage and same-folder, header-linked conversation lookup, while retaining Gmail/Workspace support through server-side XOAUTH2. See [Migration and token budget](/docs/tool-migration) for the client contract and [Gmail and Google Workspace](/docs/gmail-workspace) for provider setup and limits.
 
 ## What it supports
 
 - Discover provider capabilities and folders, search mail, and read plain-text content without marking messages read
+- Triage unread or flagged messages with counts for the returned page, then inspect a bounded conversation using exact header links
 - Opt into mailbox organization, including flags, folders, copies, moves, Trash, and saved drafts
 - Connect Gmail/Workspace through owner-provisioned XOAUTH2, with provider-specific safeguards
 - Prepare messages, natural replies/reply-all, and quoted or attached forwards with fully reviewed recipients and attachments
@@ -23,6 +24,17 @@ Version 0.5.0 groups 19 operations into six MCP tools and adds Gmail/Workspace s
 Read access is the default. Mailbox writes, sending, and permanent deletion have separate deployment gates. Tokens also need the applicable scopes. Some operations require provider capabilities; unsupported operations fail rather than falling back to a mailbox-wide destructive command.
 
 The [tool reference](/docs/tools) describes current arguments, limits, and exclusions. “Email access” does not include a provider's account settings, server-side filtering rules, or desktop-only mail data.
+
+## Inbox workflow
+
+1. Call `mail_query` with `action: "triage"` to find unread or flagged messages. Add ordinary search filters when useful. Counts describe only the returned rows; unread and flagged counts overlap and do not indicate urgency.
+2. Choose an exact message reference and call `mail_query` with `action: "conversation"` for related summaries in that folder. Follow its own cursor even after an empty page.
+3. Read the exact references needed to understand the exchange. Conversation summaries contain no message bodies and are not a complete account-wide thread.
+4. If a response is wanted, use `mail_prepare` with `action: "reply"` or `"reply_all"`, then review the full preparation before separately authorizing sending.
+
+See the [copyable workflow examples](/docs/tools#inbox-workflow-example). Both query actions are read-only, with a default 25-row limit, a maximum of 100 rows, and at most one 1000-UID scan window per call. They do not mark messages read. Conversation linkage uses a fixed set of IDs from the anchor's Message-ID, References, and In-Reply-To headers, without subject matching or recursive expansion. Messages in other folders or without usable links may be missing.
+
+Saving a draft still creates a new message. Lossless opening and editing of an existing saved draft is not supported.
 
 ## Setup order
 

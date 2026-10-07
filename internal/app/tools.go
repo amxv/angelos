@@ -28,8 +28,8 @@ type queryInput struct {
 	PreparedID string             `json:"prepared_id,omitempty"`
 	Search     mail.SearchRequest `json:"search,omitempty"`
 	Reference  mail.Reference     `json:"reference,omitempty"`
-	Index      int                `json:"index,omitempty" jsonschema:"One-based attachment index from read"`
-	Detail     string             `json:"detail,omitempty" jsonschema:"summary (default) or full; search/read only"`
+	Index      int                `json:"index,omitempty" jsonschema:"One-based read attachment index"`
+	Detail     string             `json:"detail,omitempty" jsonschema:"summary (default) or full"`
 }
 type createInput struct {
 	Action      string         `json:"action"`
@@ -66,6 +66,8 @@ var actions = map[string]map[string]actionRule{
 	"mail_query": {
 		"capabilities": {}, "folders": {},
 		"search":      {optional: "search detail"},
+		"triage":      {optional: "search detail"},
+		"conversation": {required: "reference", optional: "search detail"},
 		"read":        {required: "reference", optional: "detail"},
 		"attachment":  {required: "reference index"},
 		"send_status": {required: "prepared_id"},
@@ -109,7 +111,7 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		}
 		usage = append(usage, part+")")
 	}
-	schema.Properties["action"].Description = strings.Join(usage, "; ") + ". Other fields are rejected."
+	schema.Properties["action"].Description = strings.Join(usage, "; ") + ". Reject other fields."
 	if p := schema.Properties["prepared_id"]; p != nil {
 		p.Pattern = "^[0-9a-f]{32}$"
 	}
@@ -126,7 +128,8 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		p.Properties["order"].Enum = []any{"", "newest", "oldest"}
 		p.Properties["order"].Description = "UID arrival order; newest is default"
 		p.Properties["message_id"].Description = "Exact case-sensitive Message-ID"
-		p.Properties["participant"].Description = "Case-insensitive header substring: From, Reply-To, To, Cc; excludes Bcc"
+		p.Properties["attention"].Description = "Unread OR flagged; AND other filters"
+		p.Properties["participant"].Description = "Header substring: From/Reply-To/To/Cc; case-insensitive; no Bcc"
 	}
 	if p := schema.Properties["original_mode"]; p != nil {
 		p.Enum = []any{"", "quoted", "eml", "none"}
@@ -176,6 +179,19 @@ func validateAction(name string, raw json.RawMessage) error {
 			return fmt.Errorf("%s must not be null", k)
 		}
 	}
+	if name == "mail_query" && (action == "conversation" || action == "triage") {
+		var filters map[string]json.RawMessage
+		if raw, present := fields["search"]; present {
+			if err := json.Unmarshal(raw, &filters); err != nil { return errors.New("invalid search fields") }
+		}
+		if action == "conversation" {
+			for key := range filters {
+				if key != "folder" && key != "order" && key != "cursor" && key != "limit" { return fmt.Errorf("conversation does not accept search.%s", key) }
+			}
+		} else if raw, present := filters["attention"]; present && !bytes.Equal(bytes.TrimSpace(raw), []byte("true")) {
+			return errors.New("triage always selects unread OR flagged; omit search.attention or set it true")
+		}
+	}
 	if value, present := fields["message"]; present {
 		var messageFields map[string]json.RawMessage
 		if err := json.Unmarshal(value, &messageFields); err != nil {
@@ -191,10 +207,10 @@ func validateAction(name string, raw json.RawMessage) error {
 }
 
 func (a *App) registerTools(s *mcp.Server) {
-	grouped(s, a, tool("mail_query", "Read-only. Use discovered SPECIAL-USE names and exact folder/uid_validity/uid. Gmail labels overlap; All is not Archive. Search is bounded UID arrival order; follow next_cursor even on empty pages. Read uses PEEK. detail=full restores full read/search output. Attachment is decoded base64, max 2 MiB; never execute. send_status requires mail.send + store, works with sending disabled; expires_at is the preparation deadline.", true, false, false), "mail.read", a.query)
-	grouped(s, a, tool("mail_create", "Create folder, copy exact message, or save draft without sending. Defaults to discovered Drafts; preserves BCC. Repetition can duplicate; verify ambiguous outcomes before retrying. Replace drafts by saving first, then explicitly retiring the old UID.", false, false, false), "mail.write", a.create)
-	grouped(s, a, tool("mail_modify", "Flags add/remove deltas, never Deleted; use unchanged_since with CONDSTORE and reread conflicts. Rename affects other clients. Move requires UID MOVE; Trash uses unique SPECIAL-USE discovery. Refresh references afterward; never blindly retry uncertain outcomes.", false, true, false), "mail.write", a.modify)
-	register(s, a, tool("mail_delete_permanently", "Irreversibly delete only the exact UID using UID EXPUNGE, never global EXPUNGE. Obtain explicit per-action user confirmation. Requires the permanent-delete gate. Unavailable for Gmail/Workspace.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
+	grouped(s, a, tool("mail_query", "Read-only; exact references and SPECIAL-USE names. Gmail labels overlap; All is not Archive. Bounded UID order; follow next_cursor on empty pages too. Triage: unread OR flagged, page counts. Conversation: same-folder ID links; search only folder/order/cursor/limit. PEEK reads; full detail opt-in. Attachments: base64, max 2 MiB; never execute. send_status needs send scope/store, not sending enabled; expires_at is preparation deadline.", true, false, false), "mail.read", a.query)
+	grouped(s, a, tool("mail_create", "Create folder, copy exact message, or save draft without sending. Defaults to SPECIAL-USE Drafts; preserves BCC. May duplicate; verify uncertain outcomes before retrying. Save replacement drafts first, then explicitly retire old UID.", false, false, false), "mail.write", a.create)
+	grouped(s, a, tool("mail_modify", "Add/remove flags, never Deleted; use unchanged_since with CONDSTORE, reread conflicts. Rename affects other clients. Move requires UID MOVE; Trash needs unique SPECIAL-USE. Refresh references afterward; never blindly retry uncertain outcomes.", false, true, false), "mail.write", a.modify)
+	register(s, a, tool("mail_delete_permanently", "Irreversible exact UID EXPUNGE, never global. Requires explicit per-action user confirmation and permanent-delete gate. Unavailable for Gmail/Workspace.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
 		if a.Config.IsGmailIMAP() {
 			return nil, mail.ErrGmailDelete
 		}
@@ -203,8 +219,8 @@ func (a *App) registerTools(s *mcp.Server) {
 		}
 		return a.Mail.Delete(ctx, in)
 	})
-	grouped(s, a, tool("mail_prepare", "Prepare immutable message for 15 minutes; does NOT send. Replies derive omitted To; reply_all also Cc. Lists replace; [] clears, null rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed, other headers/files retained), none. attachment_indexes selects source files. Review full text/HTML, recipients/BCC, warnings/hashes before mail_send_confirmed. Requires send scope/store.", false, false, false), "mail.send", a.prepare)
-	register(s, a, tool("mail_send_confirmed", "Send exact prepared ID/digest after user approval of full payload. Durable one-time claim. accepted means SMTP acceptance, not delivery. Never retry or prepare duplicates for sending/unknown. Host confirmation trusts the client, not proof of a human click. append_sent requires write authority; Gmail requires false.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
+	grouped(s, a, tool("mail_prepare", "Prepare immutable 15-minute message; does NOT send. Replies derive omitted To; reply_all also Cc. Lists replace; [] clears; null rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed, remaining bytes retained), none. attachment_indexes selects source files. Review complete text/HTML, recipients/BCC, warnings/hashes before mail_send_confirmed. Needs send scope/store.", false, false, false), "mail.send", a.prepare)
+	register(s, a, tool("mail_send_confirmed", "Send user-approved payload by exact prepared ID/digest. Durable one-time claim. accepted is SMTP acceptance, not delivery. Never retry/duplicate sending/unknown. Confirmation trusts client; no proof of human click. append_sent needs write scope; false for Gmail.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
 		if e := a.authorizeSent(ctx, in); e != nil {
 			return nil, e
 		}
@@ -229,6 +245,15 @@ func (a *App) query(ctx context.Context, in queryInput) (any, error) {
 	case "folders":
 		v, e := a.Mail.ListFolders(ctx)
 		return result{"folders": v}, e
+	case "triage":
+		in.Search.Attention = true
+		v, e := a.Mail.Search(ctx, in.Search)
+		if e != nil { return v, e }
+		return triageSummary(v, in.Search.Folder, in.Detail), nil
+	case "conversation":
+		v, e := a.Mail.Conversation(ctx, in.Reference, in.Search)
+		if e != nil { return v, e }
+		return conversationSummary(v, in.Reference, in.Detail), nil
 	case "search":
 		v, e := a.Mail.Search(ctx, in.Search)
 		if e != nil || in.Detail == "full" {

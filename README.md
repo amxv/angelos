@@ -7,13 +7,16 @@ The repository is private while under active development and is intended to be o
 ## Capabilities
 
 - Gmail/Workspace XOAUTH2 for personal/internal use, with pinned hosts and conservative Sent/delete safeguards
-- Six risk-separated MCP tools cover 19 operations with compact schemas and optional full-detail read/search results
+- Six risk-separated MCP tools cover 21 operations with compact schemas and optional full-detail message results
+- Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links
 - Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
 - Inspect provider capabilities, discover folders, search, and read mail without marking it read
 - Opt into flag changes, folder creation/rename, copying, moving, Trash, and saved drafts
 - Prepare messages, natural replies/reply-all, and quoted or attached forwards with reviewed To/CC/BCC, text/HTML, and bounded attachments
 - Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
 - Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
+
+Triage and conversation lookup are read-only: they fetch summaries and bounded selected headers, not message bodies, and do not mark mail read. Conversations use exact Message-ID/References/In-Reply-To links to a fixed anchor ID set, with no subject fallback or recursive expansion. Results do not claim mailbox-wide counts, urgency, or complete cross-folder threads. Read each exact reference for message content. Lossless editing of existing saved drafts is not supported.
 
 Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. Existing clients should follow the [tool migration guide](./docs/src/content/docs/tool-migration.md). See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
 

@@ -60,6 +60,8 @@ type SearchRequest struct {
 	// Participant is IMAP case-insensitive header substring matching across
 	// From, Reply-To, To, or Cc. Bcc is deliberately excluded.
 	Participant string `json:"participant,omitempty"`
+	// Attention selects unread OR flagged messages, AND other filters.
+	Attention bool `json:"attention,omitempty"`
 }
 type SearchResult struct {
 	Messages    []Summary `json:"messages"`
@@ -86,10 +88,11 @@ type Message struct {
 	Warnings    []string          `json:"warnings,omitempty"`
 }
 
-// Reader is the complete externally exposable mailbox surface in v1.
+// Reader exposes read-only mailbox discovery and message lookup.
 type Reader interface {
 	ListFolders(context.Context) ([]Folder, error)
 	Search(context.Context, SearchRequest) (SearchResult, error)
+	Conversation(context.Context, Reference, SearchRequest) (SearchResult, error)
 	Read(context.Context, Reference) (Message, error)
 }
 

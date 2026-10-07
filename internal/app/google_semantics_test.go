@@ -150,7 +150,7 @@ func TestGmailScopesAndSendGatesRemainRequired(t *testing.T) {
 }
 
 func TestGmailDiscoveryContainsRestrictionsAndVersion(t *testing.T) {
-	if Version != "0.5.0" {
+	if Version != "0.6.0" {
 		t.Fatalf("version: %s", Version)
 	}
 	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
@@ -168,7 +168,7 @@ func TestGmailDiscoveryContainsRestrictionsAndVersion(t *testing.T) {
 				t.Fatal(desc)
 			}
 		case "mail_send_confirmed":
-			if !strings.Contains(desc, "Gmail requires false") {
+			if !strings.Contains(desc, "false for Gmail") {
 				t.Fatal(desc)
 			}
 		}

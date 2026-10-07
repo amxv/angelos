@@ -193,6 +193,11 @@ func (b *groupedBackend) Search(_ context.Context, in mail.SearchRequest) (mail.
 	b.search = in
 	return mail.SearchResult{Messages: []mail.Summary{b.message.Summary}, UIDValidity: groupedReference.UIDValidity, NextCursor: "cursor-next", ScannedUIDs: 1000, Order: "oldest"}, nil
 }
+func (b *groupedBackend) Conversation(_ context.Context, ref mail.Reference, in mail.SearchRequest) (mail.SearchResult, error) {
+	b.called("conversation")
+	b.reference, b.search = ref, in
+	return mail.SearchResult{Messages: []mail.Summary{b.message.Summary}, UIDValidity: ref.UIDValidity, NextCursor: "conversation-next", ScannedUIDs: 1000, Order: "newest"}, nil
+}
 func (b *groupedBackend) Read(_ context.Context, ref mail.Reference) (mail.Message, error) {
 	b.called("read")
 	b.reference = ref
@@ -306,6 +311,8 @@ func groupedOperations() []groupedOperation {
 		{"capabilities", "mail_query", `{"action":"capabilities"}`, "mail.read", []string{"capabilities"}, 0},
 		{"folders", "mail_query", `{"action":"folders"}`, "mail.read", []string{"folders"}, 0},
 		{"search", "mail_query", `{"action":"search","search":{"folder":"INBOX","query":"invoice","order":"oldest","from":"from@example.com","to":"owner@example.com","subject":"Due","message_id":"<Case@Example.com>","participant":"Person","since":"2026-01-01","before":"2026-02-01","unread":false,"flagged":false,"cursor":"input-cursor","limit":7}}`, "mail.read", []string{"search"}, 0},
+		{"triage", "mail_query", `{"action":"triage","search":{"folder":"INBOX","limit":7}}`, "mail.read", []string{"search"}, 0},
+		{"conversation", "mail_query", `{"action":"conversation","reference":` + ref + `,"search":{"limit":7}}`, "mail.read", []string{"conversation"}, 0},
 		{"read", "mail_query", `{"action":"read","reference":` + ref + `}`, "mail.read", []string{"read"}, 0},
 		{"attachment", "mail_query", `{"action":"attachment","reference":` + ref + `,"index":1}`, "mail.read", []string{"attachment"}, 0},
 		{"folder", "mail_create", `{"action":"folder","name":"Projects"}`, "mail.write", []string{"folder"}, 0},
