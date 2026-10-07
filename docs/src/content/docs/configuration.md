@@ -59,6 +59,22 @@ Spacemail and custom providers use the existing username/password flow. Gmail ha
 
 `MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, and `MCP_ALLOWED_SUBJECTS` are required. See [Set up OAuth access](/docs/authentication) for their exact constraints and accepted JWT format.
 
+### First-party OAuth (opt-in)
+
+Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enabled, the four `MCP_*` settings above must use the [fixed issuer/resource and single-owner configuration](/docs/first-party-oauth#configuration). The same `ANGELOS_REDIS_REST_URL` and `ANGELOS_REDIS_REST_TOKEN` are required even with sending disabled. Set an explicit bare mailbox address in `MAIL_FROM` for the owner consent screen.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ANGELOS_OAUTH_ENABLED` | Disabled | `1` enables the built-in owner-only authorization server |
+| `ANGELOS_OAUTH_SIGNING_KEY_PEM` | Required when enabled | Durable ES256 P-256 private key as PKCS#8 or EC PEM; sensitive API runtime secret |
+| `ANGELOS_OAUTH_SIGNING_KEY_ID` | Required when enabled | Stable, unique active signing-key ID (`kid`) |
+| `ANGELOS_OAUTH_VERIFICATION_KEYS_JSON` | Empty | Optional JSON object mapping up to four retiring key IDs to PKIX public-key PEM strings |
+| `ANGELOS_OAUTH_CLIENTS_JSON` | Empty | Predefined public-client array with `client_id`, `client_name`, and exact `redirect_uris` |
+| `ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED` | Disabled | `1` enables only the pinned ChatGPT metadata identity described in the runbook |
+| `ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH` | Empty | Lowercase SHA-256 hex digest of the high-entropy one-time owner-enrollment token; remove after enrollment |
+
+Configure an allowed client before connecting. First-party mode does not expose dynamic client registration, passwords, or public account signup. The cookie name, secure flags, relying-party ID, allowed origin, and session lifetimes are fixed; there is no cookie signing secret or permissive development override. See [owner setup and recovery](/docs/first-party-oauth#owner-enrollment-and-recovery).
+
 ## Optional capabilities
 
 | Variable | Default | Effect |
@@ -66,7 +82,7 @@ Spacemail and custom providers use the existing username/password flow. Gmail ha
 | `MAIL_ENABLE_WRITES` | Disabled | Allows mailbox mutations when the token also has `mail.write` |
 | `MAIL_ENABLE_SEND` | Disabled | Allows preparation and sending when the token has `mail.send` and a durable store is configured |
 | `MAIL_ENABLE_DELETE` | Disabled | Additional gate for permanent single-message deletion; ordinary writes must also be enabled; unavailable for Gmail/Workspace |
-| `ANGELOS_REDIS_REST_URL` | Unset | HTTPS endpoint for preparation/dispatch and read-only receipt lookup |
+| `ANGELOS_REDIS_REST_URL` | Unset | HTTPS endpoint shared by first-party OAuth state, preparation/dispatch, and receipt lookup |
 | `ANGELOS_REDIS_REST_TOKEN` | Unset | Secret used to authenticate durable-store requests |
 
 Set an enable flag to `1` to opt in. A scoped token does not override a disabled gate. The Redis endpoint must support the command API used by the store, including `SET` and atomic Lua `EVAL`; a raw Redis TCP URL is unsupported.
@@ -75,7 +91,7 @@ A valid configured store remains available for owner-scoped receipt reads when `
 
 ## Startup status
 
-`GET /healthz` reports the service version and whether required local configuration validated. It does not test the provider login, fetch OAuth signing keys, or prove Redis is reachable. Incomplete mail or OAuth configuration leaves `/mcp` unavailable with `503`. Incomplete store configuration leaves sending disabled while valid mailbox reads can still run.
+`GET /healthz` reports the service version and whether required local configuration validated. It does not test the provider login, fetch OAuth signing keys, or prove Redis is reachable. Incomplete mail or OAuth configuration leaves `/mcp` unavailable with `503`. In external-issuer mode, incomplete store configuration leaves sending disabled while valid mailbox reads can still run. First-party mode also requires valid Redis and signing configuration; a runtime Redis failure denies token issuance and authenticated MCP calls. `configured: true` is not a Redis availability check.
 
 ## Secrets and deployment environments
 

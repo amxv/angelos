@@ -42,7 +42,7 @@ Angelos does not render active HTML or load remote email images. It prefers a pl
 
 MCP tool annotations describe effects to the host. The trusted MCP client must obtain and honor the owner's approval for the exact action when required. Angelos verifies authentication, scopes, feature switches, input constraints, and payload bindings. It cannot inspect a conversation to establish what a human actually approved.
 
-In particular, a digest echoed by a model proves that supplied content matches a prepared message. It does not prove a human clicked an approval button. Only connect a client you trust to enforce its confirmation rules. This implementation does not provide an independent human-approval web UI.
+In particular, a digest echoed by a model proves that supplied content matches a prepared message. It does not prove a human clicked an approval button. Only connect a client you trust to enforce its confirmation rules. First-party OAuth has an owner consent screen for granting scopes to a client. That consent is not an independent approval screen for individual mail actions.
 
 For sending, review all recipients including CC and BCC, the subject, complete text and HTML bodies, attachments, and reply/forward context. Derived reply recipients are suggestions until that review. Explicit attached-EML forwarding includes original headers and attachments; only outer Bcc/Resent-Bcc fields are removed, and embedded attachments may still contain private data. If any content or destination changes, prepare and review a new message. A reusable draft or previous approval does not authorize unrelated mail.
 

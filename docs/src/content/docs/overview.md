@@ -29,7 +29,7 @@ Angelos supplies the mail and the tools; your assistant interprets the request a
 - **Write with review.** Prepare new messages, replies, reply-all, and forwards. Review the final recipients, text, and attachments before sending.
 - **Keep your usual mail app.** Both clients use the same server mailbox. Changes made in either can appear in the other.
 
-Read access is the default. Mailbox changes, sending, and permanent deletion have separate operator-controlled switches and access permissions. Your client remains responsible for getting the required approval; Angelos does not have its own human-approval screen.
+Read access is the default. Mailbox changes, sending, and permanent deletion have separate operator-controlled switches and access permissions. Your client remains responsible for getting approval for individual mail actions. First-party OAuth consent grants a client scopes; it is not approval of a particular message or mailbox change.
 
 ## Choose a mailbox
 

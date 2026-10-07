@@ -29,11 +29,11 @@ MAIL_AUTH_MODE=google_oauth2
 MAIL_USERNAME=person@example.com
 MAIL_FROM=person@example.com
 GOOGLE_CLIENT_ID=your-web-application-client-id
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REFRESH_TOKEN=your-offline-refresh-token
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
 ```
 
-Remove `MAIL_PASSWORD` when using Google OAuth. `google_oauth2` is the Gmail default; it must have a complete matching client ID, client secret, and refresh token. For SMTP STARTTLS, also set `SMTP_PORT=587` and `SMTP_TLS_MODE=starttls`.
+The secret fields above are deliberately blank; supply the owner-provisioned values securely. Remove `MAIL_PASSWORD` when using Google OAuth. `google_oauth2` is the Gmail default; it must have a complete matching client ID, client secret, and refresh token. For SMTP STARTTLS, also set `SMTP_PORT=587` and `SMTP_TLS_MODE=starttls`.
 
 `MAIL_FROM` should be the authenticated mailbox or an already authorized Google send-as alias. Angelos does not create aliases or change Google sender settings. `MAIL_ALIASES` only excludes your own addresses from derived replies; it does not grant sender authority. [Google alias setup](https://support.google.com/mail/answer/22370?hl=en)
 

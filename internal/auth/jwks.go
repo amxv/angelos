@@ -57,6 +57,9 @@ func (a *Authenticator) signingKey(ctx context.Context, kid, alg string) (verifi
 }
 
 func (a *Authenticator) fetchKeys(ctx context.Context) (map[string]verificationKey, error) {
+	if a.config.LocalJWKS != nil {
+		return parseKeys(a.config.LocalJWKS)
+	}
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.config.JWKSURL, nil)

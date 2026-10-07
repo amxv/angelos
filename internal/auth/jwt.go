@@ -131,12 +131,42 @@ func (a *Authenticator) verify(ctx context.Context, token string) (Principal, er
 		return Principal{}, ErrInvalidToken
 	}
 	scopes := strings.Fields(scope)
+	if a.config.CheckGrant != nil {
+		// First-party tokens have a single exact audience, a short fixed maximum
+		// lifetime and mandatory identifiers. The external-issuer profile remains
+		// compatible with its existing claims contract.
+		audience, audienceOK := stringValue(claims, "aud")
+		issued, issuedOK := integerValue(claims["iat"])
+		jti, jtiOK := stringValue(claims, "jti")
+		grantID, grantOK := stringValue(claims, "gid")
+		clientID, clientOK := stringValue(claims, "client_id")
+		if !audienceOK || audience != a.config.ResourceURL || !issuedOK || expires-issued > 300 || !jtiOK || !boundedIdentifier(jti) || !grantOK || !boundedIdentifier(grantID) || !clientOK || !boundedIdentifier(clientID) || len(scopes) == 0 || len(scopes) > 3 {
+			return Principal{}, ErrInvalidToken
+		}
+		seen := make(map[string]bool)
+		for _, granted := range scopes {
+			if seen[granted] || (granted != ScopeRead && granted != ScopeWrite && granted != ScopeSend) {
+				return Principal{}, ErrInvalidToken
+			}
+			seen[granted] = true
+		}
+		if err := a.config.CheckGrant(ctx, grantID, clientID, subject, append([]string(nil), scopes...)); err != nil {
+			return Principal{}, ErrInvalidToken
+		}
+		if expires <= a.now().Unix() {
+			return Principal{}, ErrInvalidToken
+		}
+	}
 	for _, granted := range scopes {
 		if granted == ScopeRead {
 			return Principal{Issuer: issuer, Resource: a.config.ResourceURL, Subject: subject, Scopes: scopes}, nil
 		}
 	}
 	return Principal{}, ErrInsufficientScope
+}
+
+func boundedIdentifier(value string) bool {
+	return value != "" && len(value) <= 512 && !strings.ContainsAny(value, "\r\n\t ")
 }
 
 func stringValue(object map[string]json.RawMessage, key string) (string, bool) {

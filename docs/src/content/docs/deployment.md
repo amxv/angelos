@@ -18,7 +18,7 @@ Use separate Vercel projects. The existing documentation project and domain rema
 ## Prerequisites
 
 - A mailbox with IMAP and SMTP access
-- An existing OAuth issuer meeting the [authentication requirements](/docs/authentication)
+- Either the built-in [first-party OAuth configuration](/docs/first-party-oauth), including durable Redis and stable signing keys, or an existing issuer meeting the [authentication requirements](/docs/authentication)
 - A Vercel account and the official Vercel CLI
 - Access to the currently private source repository
 - Go 1.27.1 for local checks, matching the requested toolchain in `go.mod` and CI
@@ -36,13 +36,13 @@ vercel link
 
 Choose or create a distinct API project and confirm its root directory is the repository root. Check the project selected by the CLI before adding secrets or deploying. Keep `.vercel/` untracked.
 
-Add each required variable from [Configuration reference](/docs/configuration) to that project's production environment. Prefer Vercel's sensitive environment settings for mailbox passwords, Google client secret/refresh token when applicable, and durable-store credentials. Gmail owners must separately complete the approved manual grant setup in [Gmail and Google Workspace](/docs/gmail-workspace); deployment does not create that grant. Enter secret values interactively instead of placing them in command history:
+Add each required variable from [Configuration reference](/docs/configuration) to that project's production environment. Prefer Vercel's sensitive environment settings for mailbox passwords, Google client secret/refresh token when applicable, durable-store credentials, and the first-party signing key and bootstrap hash. Gmail owners must separately complete the approved manual grant setup in [Gmail and Google Workspace](/docs/gmail-workspace); deployment does not create that grant. Enter secret values interactively instead of placing them in command history:
 
 ```bash
 vercel env add MAIL_PASSWORD production
 ```
 
-Use a stable production API hostname in `MCP_RESOURCE_URL`, including `/mcp`, and configure the issuer for that exact audience. An automatically generated preview URL is a different audience. See the official [CLI linking](https://vercel.com/docs/cli/link) and [environment-variable](https://vercel.com/docs/cli/env) references.
+Use a stable production API hostname in `MCP_RESOURCE_URL`, including `/mcp`, and configure the issuer for that exact audience. An automatically generated preview URL is a different audience. First-party mode pins issuer `https://api.angelos.ashray.xyz`, resource `https://api.angelos.ashray.xyz/mcp`, and its passkey relying party; it rejects preview/alternate hosts rather than deriving trust from Host or forwarded headers. Keep first-party OAuth disabled and production secrets absent from preview environments. See the official [CLI linking](https://vercel.com/docs/cli/link) and [environment-variable](https://vercel.com/docs/cli/env) references.
 
 Once configuration and local/CI checks are ready, publish the API intentionally:
 
@@ -50,11 +50,11 @@ Once configuration and local/CI checks are ready, publish the API intentionally:
 vercel --prod
 ```
 
-Deploying code does not complete OAuth client registration, create a mailbox, configure DNS, or connect ChatGPT.
+Deploying code does not complete owner enrollment, configure an allowed OAuth client, create a mailbox, configure DNS, or connect ChatGPT. First-party OAuth remains opt-in. This implementation does not establish that production OAuth setup or live ChatGPT acceptance has happened. Follow [the separate rollout checklist](/docs/first-party-oauth#rollout-and-live-acceptance).
 
 ## Verify before granting write access
 
-1. Fetch the API's `/.well-known/oauth-protected-resource` document and verify its resource URL and issuer.
+1. Fetch the API's `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` documents and verify the exact resource URL and issuer. For first-party mode, also verify authorization-server metadata and public JWKS, then complete owner enrollment.
 2. Confirm that `/mcp` rejects an unauthenticated request with `401` and a discovery challenge.
 3. Connect with an allowlisted account and verify folder names and a small read-only search.
 4. Open a message and confirm that it remains unread in another client when it was unread before.
@@ -66,4 +66,4 @@ Run checks against the actual production API URL rather than assuming a successf
 
 Keep mail operation timeouts inside the selected function duration. Do not rely on background goroutines continuing after an HTTP response. Vercel blocks outgoing SMTP port 25; authenticated submission on 465 or 587 is the intended path. See [Vercel's SMTP guidance](https://vercel.com/kb/guide/serverless-functions-and-smtp).
 
-Durable send state must live outside a function instance. A process restart, scale-out, or deployment can discard local memory. See [Safety and permissions](/docs/safety).
+Durable send state, and all first-party OAuth security state, must live outside a function instance. A process restart, scale-out, or deployment can discard local memory. See [Safety and permissions](/docs/safety).

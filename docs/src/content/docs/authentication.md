@@ -1,6 +1,6 @@
 ---
 title: Set up OAuth access
-description: Connect Angelos to an existing OAuth issuer and restrict access to the mailbox owner.
+description: Choose owner-only first-party OAuth or an existing issuer and configure scoped MCP access.
 summary: OAuth setup, token requirements, and ChatGPT connection prerequisites.
 order: 22
 category: Run Angelos
@@ -8,7 +8,12 @@ category: Run Angelos
 
 Already have an Angelos endpoint? Follow [Connect your inbox](/docs/quickstart); this page is for the operator configuring access to that endpoint.
 
-For MCP clients, Angelos is an OAuth resource server. It verifies access tokens issued by an existing authorization server. It does not provide sign-in pages, issue MCP tokens, register OAuth clients, or store MCP-client refresh tokens.
+For MCP clients, Angelos is an OAuth resource server with two operator-selected modes:
+
+- **First-party OAuth:** an opt-in, single-owner authorization server on the canonical Angelos API hostname. It uses owner passkeys, explicit client consent, signed JWT access tokens, and Redis-backed sessions and rotating refresh tokens. Follow [First-party OAuth](/docs/first-party-oauth) for its stricter configuration and setup.
+- **External issuer:** the existing resource-server mode, used when first-party OAuth is disabled. Your external authorization server owns sign-in, client registration, consent, and refresh tokens. The requirements below continue to apply to this mode.
+
+Enabling or deploying the implementation does not enroll the owner or verify a live ChatGPT connection. First-party production setup is a separate operator action.
 
 Mailbox authentication is a separate system: the Gmail preset uses an owner-provisioned Google refresh token on the server to obtain IMAP/SMTP access tokens. That Google grant cannot authenticate an MCP call or replace this issuer configuration. See [Gmail and Google Workspace](/docs/gmail-workspace) for its broader scope and setup restrictions.
 
@@ -53,20 +58,22 @@ Changing issuer, resource, or subject intentionally prevents access to older own
 
 ## Connect ChatGPT
 
+For the built-in issuer, first complete [owner enrollment and client setup](/docs/first-party-oauth). For an external issuer:
+
 1. Create a custom MCP connection using the deployed `/mcp` endpoint and OAuth authentication.
 2. If using a predefined OAuth client, supply that client's details in the connection setup.
 3. Copy the exact redirect URI shown by ChatGPT into the issuer's allowlist. Current ChatGPT connections can use callback-specific URLs; do not guess or copy an old tutorial's callback.
 4. Sign in as an allowlisted subject and authorize the relevant scopes.
 5. Refresh the connection's tools after changing the server's exposed tool set.
 
-The public `/.well-known/oauth-protected-resource` endpoint advertises the configured resource, issuer, and mail scopes. Unauthenticated requests receive `401` with a `WWW-Authenticate` discovery challenge. A valid token missing the base read scope receives `403`.
+The public `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` endpoints advertise the configured resource, issuer, and mail scopes. Unauthenticated requests receive `401` with a `WWW-Authenticate` discovery challenge. A valid token missing the base read scope receives `403`.
 
 See the current [OpenAI MCP setup guide](https://developers.openai.com/api/docs/guides/custom-mcp-server), [OpenAI authentication guide](https://developers.openai.com/plugins/build/auth), and [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) for issuer/client setup.
 
 ## Signing-key rotation and troubleshooting
 
-Signing keys are fetched on demand and cached for five minutes. An unknown key ID can trigger a refresh, limited to once a minute. Fetches have a five-second timeout and bounded response size; redirects are not followed.
+In external-issuer mode, signing keys are fetched on demand and cached for five minutes. An unknown key ID can trigger a refresh, limited to once a minute. Fetches have a five-second timeout and bounded response size; redirects are not followed.
 
-Validation is local after keys are cached. There is no token-introspection request, token-revocation lookup, or replay ledger. Use short-lived access tokens. Removing a signing key can take up to the cache lifetime to affect an instance; changing the subject allowlist requires restarting or redeploying with the new configuration.
+In external-issuer mode, validation is local after keys are cached. There is no external token-introspection request, token-revocation lookup, or replay ledger. Use short-lived access tokens. For this external-key cache, removing a signing key can take up to the cache lifetime to affect an instance; changing the subject allowlist requires restarting or redeploying with the new configuration. First-party mode uses its configured local public keys and additionally checks Redis-backed grant validity on authenticated requests; see its [revocation and rotation rules](/docs/first-party-oauth).
 
 Check exact issuer, audience, subject, scope, and time claims when authorization fails. Check that the published JWKS includes the signing key and is reachable at its configured public address. Do not log access tokens, mailbox passwords, or complete private mail while debugging.

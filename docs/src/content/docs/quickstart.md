@@ -13,7 +13,7 @@ This guide is for using an Angelos server that is already running. If you are se
 Ask the person running Angelos for:
 
 - **The MCP URL**, usually an HTTPS address ending in `/mcp`. MCP is the connection protocol your assistant uses to access tools.
-- **The sign-in service and account to use.** Angelos relies on an existing OAuth sign-in service, also called an issuer. Your account must be allowed by the operator.
+- **The sign-in service and account to use.** The operator can use Angelos's owner-only passkey sign-in or an external OAuth issuer. Use the enrolled owner passkey or the account allowed by that operator.
 - **Any client setup details** required by that sign-in service and your assistant app.
 - **The connected mailbox and enabled actions:** reading, mailbox changes, sending, or permanent deletion.
 

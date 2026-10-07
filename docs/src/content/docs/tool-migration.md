@@ -69,7 +69,7 @@ Run the metric checks with:
 go test ./internal/app -run 'TestToolSchemaTokenBudget|TestSearchSummaryLossless|TestReadSummaryPreservesSafetyAndFullText' -v
 ```
 
-The discovery test enforces a ceiling of 65% of baseline size, providing room for small safety clarifications while preventing accidental return to the old overhead. Per-action requirements are concise schema descriptions plus strict server-side key checks, rather than large repeated union branches. Clients should use the declared `action` enum and only its documented fields; every call still receives typed JSON Schema validation.
+The version 0.2 discovery test enforced a ceiling of 65% of baseline size, providing room for small safety clarifications while preventing accidental return to the old overhead. The later version 0.7 and OAuth compatibility budgets are described below. Per-action requirements are concise schema descriptions plus strict server-side key checks, rather than large repeated union branches. Clients should use the declared `action` enum and only its documented fields; every call still receives typed JSON Schema validation.
 
 ### Version 0.6 discovery measurement
 
@@ -141,3 +141,12 @@ Draft saving is unchanged: it appends a new composed draft. Lossless editing of 
 The six tool names now cover 22 operations. `mail_query` adds `read_many` with 1–10 distinct exact references, per-item outcomes, explicit budget/continuation metadata, and summary/full detail. Existing single `read` behavior is unchanged. Application-handler errors gain stable codes and recovery guidance; SDK-level validation remains SDK-formatted. Scopes, deployment gates, annotations, confirmation, exact UIDVALIDITY/MODSEQ, and one-time send semantics are unchanged.
 
 The five-selected-message signed MCP fixture reduces read calls from five to one. Complete MCP result JSON grows from 10,760 to 11,708 bytes in that fixture; discovery grows from 9,661 bytes in 0.6 to 10,341 bytes in 0.7. Per-item references/status and budget metadata add response bytes; this is a round-trip reduction, not a claim of smaller total output. Discovery remains six tools; the schema-size regression ceiling is now 70% of the original 17-tool baseline to accommodate the bounded reference array. Historical measurements above describe their named releases.
+
+
+## First-party OAuth and ChatGPT discovery
+
+The optional [built-in OAuth issuer](/docs/first-party-oauth) does not rename the six tools or change their 22 operation routes. `tools/list` now returns identical `securitySchemes` at the top level and in the legacy `_meta` mirror, as required by current [ChatGPT authentication guidance](https://developers.openai.com/plugins/build/auth). Authentication errors retain the `mcp/www_authenticate` challenge. Scopes, deployment gates, tool annotations, and individual send/deletion confirmation boundaries remain unchanged.
+
+The duplication adds 429 bytes to the deterministic discovery fixture: complete tool-definition JSON is 10,770 bytes against the same 14,886-byte original baseline. These are compact JSON measurements, not tokenizer counts. The regression test retains the 70% ceiling for structural definitions and permits at most 512 extra bytes only for the top-level OAuth metadata mirror; it reports the full wire size separately. Re-run `TestToolSchemaTokenBudget` on the exact commit, and do not treat the historical version tables above as current measurements.
+
+Deploying the OAuth implementation does not switch an existing issuer, enroll the owner, or verify a live ChatGPT connection. Changing issuer/resource/subject affects the owner binding of existing preparations and receipts; follow the [issuer migration procedure](/docs/first-party-oauth#migrate-from-an-external-issuer).

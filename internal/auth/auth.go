@@ -98,6 +98,15 @@ func New(c Config) (*Authenticator, error) {
 		return nil, err
 	}
 	c.AllowedSubjects = append([]string(nil), c.AllowedSubjects...)
+	c.LocalJWKS = append([]byte(nil), c.LocalJWKS...)
+	if c.LocalJWKS != nil {
+		if len(c.LocalJWKS) > maxJWKSBytes {
+			return nil, errors.New("local public signing keys exceed size limit")
+		}
+		if _, err := parseKeys(c.LocalJWKS); err != nil {
+			return nil, errors.New("invalid local public signing keys")
+		}
+	}
 	client := newPublicClient()
 	if c.HTTPClient != nil {
 		copy := *c.HTTPClient
@@ -126,7 +135,9 @@ func (a *Authenticator) MetadataURL() string { return a.metadataURL }
 // Challenge returns an RFC 9728 / RFC 6750 challenge suitable for HTTP headers
 // and MCP mcp/www_authenticate tool metadata. Only known mail scopes are emitted.
 func (a *Authenticator) Challenge(scope string) string {
-	if scope == ScopeWrite || scope == ScopeSend {
+	if scope == ScopeWrite+" "+ScopeSend {
+		scope = ScopeRead + " " + ScopeWrite + " " + ScopeSend
+	} else if scope == ScopeWrite || scope == ScopeSend {
 		scope = ScopeRead + " " + scope
 	} else {
 		scope = ScopeRead

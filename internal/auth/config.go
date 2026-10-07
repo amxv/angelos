@@ -3,6 +3,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -34,6 +35,13 @@ type Config struct {
 	// HTTPClient is an optional trusted test transport. Leave nil in production
 	// to use the public-IP-only transport. Redirects and timeouts remain bounded.
 	HTTPClient *http.Client
+	// LocalJWKS is an optional immutable public key set supplied by the same
+	// process's authorization server. It is never obtained from a request.
+	LocalJWKS []byte
+	// CheckGrant enables the stricter first-party access-token profile and an
+	// online authorization check after cryptographic verification. Errors deny
+	// access, including unavailable or missing durable authorization state.
+	CheckGrant func(context.Context, string, string, string, []string) error
 }
 
 // ConfigFromEnv fails closed if any required environment variable is missing.

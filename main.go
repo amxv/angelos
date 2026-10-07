@@ -14,6 +14,7 @@ import (
 	"github.com/amxv/angelos/internal/config"
 	"github.com/amxv/angelos/internal/dispatch"
 	"github.com/amxv/angelos/internal/mail"
+	"github.com/amxv/angelos/internal/oauth"
 )
 
 func enabled(name string) bool { return os.Getenv(name) == "1" }
@@ -27,6 +28,39 @@ func newHandler() http.Handler {
 	var mcpHandler http.Handler = unavailable
 	mailConfig, mailErr := config.LoadFromEnv()
 	authConfig, authErr := auth.ConfigFromEnv()
+	// First-party mode is deliberately opt-in. A configured mailbox alone can
+	// never enable it, and invalid first-party configuration cannot silently
+	// fall back to the external-issuer verifier.
+	firstParty := enabled("ANGELOS_OAUTH_ENABLED")
+	if firstParty {
+		issuerConfig, err := oauth.ConfigFromEnv()
+		if err == nil && authErr == nil {
+			var transport *dispatch.Redis
+			transport, err = dispatch.NewRedis(os.Getenv("ANGELOS_REDIS_REST_URL"), os.Getenv("ANGELOS_REDIS_REST_TOKEN"))
+			if err == nil {
+				var state *oauth.RedisStore
+				state, err = oauth.NewRedisStore(transport, issuerConfig.OwnerSubject)
+				if err == nil {
+					var issuer *oauth.Server
+					issuer, err = oauth.New(issuerConfig, state)
+					if err == nil {
+						handler := issuer.Handler()
+						mux.Handle(oauth.MetadataPath, handler)
+						mux.Handle("/oauth/", handler)
+						authConfig.LocalJWKS = issuer.JWKS()
+						authConfig.CheckGrant = issuer.GrantActive
+					}
+				}
+			}
+		}
+		if err != nil {
+			authErr = auth.ErrInvalidToken
+		}
+	} else if authConfig.Issuer == oauth.Issuer {
+		// The local issuer must always use online first-party grant revocation,
+		// even if all resource-server environment variables happen to be set.
+		authErr = auth.ErrInvalidToken
+	}
 	if authErr == nil {
 		u, _ := url.Parse(authConfig.ResourceURL)
 		if u.Path != "/mcp" {
@@ -63,7 +97,28 @@ func newHandler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		json.NewEncoder(w).Encode(map[string]any{"service": "angelos", "version": app.Version, "configured": configured})
 	})
-	return secureHeaders(mux)
+	var handler http.Handler = mux
+	if firstParty {
+		handler = canonicalHost(handler)
+	}
+	return secureHeaders(handler)
+}
+
+func canonicalHost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "api.angelos.ashray.xyz" || (r.URL.Host != "" && r.URL.Host != r.Host) || len(r.Header.Values("Forwarded")) != 0 {
+			http.Error(w, "invalid host", http.StatusBadRequest)
+			return
+		}
+		for name, want := range map[string]string{"X-Forwarded-Host": r.Host, "X-Forwarded-Proto": "https"} {
+			values := r.Header.Values(name)
+			if len(values) > 1 || (len(values) == 1 && values[0] != want) {
+				http.Error(w, "invalid host", http.StatusBadRequest)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // A configured receipt store remains readable after the operator disables sends.
@@ -82,6 +137,8 @@ func secureHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		if strings.ContainsAny(r.Host, "\r\n") {
 			http.Error(w, "invalid host", 400)
 			return

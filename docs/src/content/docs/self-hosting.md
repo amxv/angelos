@@ -8,7 +8,7 @@ category: Run Angelos
 
 Already have an Angelos endpoint from your operator? Start with [Connect your inbox](/docs/quickstart). This guide is for the person running the server.
 
-One Angelos deployment connects one existing mailbox to trusted MCP clients. You supply the mailbox, an OAuth issuer, and an HTTPS API host. Angelos does not create mail accounts, provide a hosted signup flow, or set up an authorization server for you. The source repository is currently private; you need access to its checkout before following these steps.
+One Angelos deployment connects one existing mailbox to trusted MCP clients. You supply the mailbox and an HTTPS API host, then choose either the opt-in first-party OAuth issuer or an existing external issuer. Angelos does not create mail accounts or offer public account registration. The source repository is currently private; you need access to its checkout before following these steps.
 
 ## Before you start
 
@@ -16,11 +16,11 @@ Have these ready:
 
 - **Source access and Go 1.27.1.** The checked-in `go.mod` declares Go `1.26.0` and requests toolchain `go1.27.1`; CI uses `1.27.1`. Use that toolchain for this checkout. Bun is only needed to work on the separate docs site.
 - **An existing mailbox with IMAP and SMTP access.** Its credentials are configured on the server, never passed through an MCP tool or an agent conversation.
-- **An existing trusted OAuth authorization server.** It must support the client sign-in flow and issue the signed JWT access tokens described in [Set up OAuth access](/docs/authentication). Angelos verifies tokens; it does not issue them.
+- **An OAuth access mode.** The built-in [first-party issuer](/docs/first-party-oauth) is fixed to `https://api.angelos.ashray.xyz` and requires Redis, a stable signing key, one owner, and passkey enrollment. For another API hostname, use an external authorization server meeting [the token requirements](/docs/authentication).
 - **A public HTTPS API hostname**, such as `https://mail-api.example.com`, with `/mcp` as its endpoint. The resource identifier, issuer, and issuer signing-key URL must meet the public-HTTPS requirements. A localhost URL cannot be the configured resource identifier.
 - **A host that can reach your mail provider and issuer.** Mail connections use verified TLS; private-address endpoints and arbitrary tool-supplied hosts are not supported.
 
-A Redis REST store is optional until you enable message preparation or sending. Start without it and leave all write/send/delete gates off.
+A Redis REST store is required for first-party OAuth, even for reads. In external-issuer mode it is optional until you enable message preparation or sending. Leave all write/send/delete gates off initially in either mode.
 
 ## 1. Choose the mailbox connection
 
@@ -36,7 +36,7 @@ For Gmail, the Google grant uses the broad `https://mail.google.com/` IMAP/SMTP 
 
 ## 2. Prepare MCP OAuth access
 
-Follow [Set up OAuth access](/docs/authentication) with your issuer administrator before trying to connect a client:
+Choose your mode before trying to connect a client. For built-in OAuth, follow the complete [first-party setup and owner-enrollment runbook](/docs/first-party-oauth); the generic external-issuer example below is not its configuration. For an external issuer, follow [Set up OAuth access](/docs/authentication) with your issuer administrator:
 
 1. Choose the stable API resource URL, ending exactly in `/mcp`, with no trailing slash.
 2. Configure the issuer to issue JWT access tokens whose audience contains that exact URL. Start with `mail.read`.
@@ -44,18 +44,18 @@ Follow [Set up OAuth access](/docs/authentication) with your issuer administrato
 4. Configure a compatible OAuth client and authorization-code flow with PKCE S256. When connecting ChatGPT, use the exact redirect URI it shows, rather than a guessed callback URL.
 5. Set the exact issuer and its public signing-key URL. The JWKS URL must be on the issuer's origin; supported signature algorithms are RS256 and ES256 with the documented key constraints.
 
-These are issuer-side setup steps, not commands Angelos runs. There is no static API-key mode or local authentication bypass. Adding another allowed subject grants access to this same mailbox, rather than provisioning a separate account.
+These external-issuer steps are performed by its administrator. There is no static API-key mode or local authentication bypass in either mode. External mode permits an allowlist of subjects sharing one mailbox; first-party mode requires exactly one owner subject.
 
 ## 3. Configure the server environment
 
 Use `.env.example` as a checklist and [Configuration reference](/docs/configuration) for every setting. Provision secrets with your host's secret manager or trusted runtime environment loader. The Go process does **not** load a `.env` file automatically. Never commit a populated environment file or paste credentials into tool arguments.
 
-For a read-only Spacemail deployment, the required values have this shape. All addresses, URLs, subjects, and secret values below are placeholders to replace with your own configured values:
+For a read-only Spacemail deployment with an external issuer, the required values have this shape. Addresses, URLs, and subjects below are placeholders; the required secret is deliberately blank and must be supplied securely:
 
 ```dotenv
 MAIL_PROVIDER=spacemail
 MAIL_USERNAME=mailbox@example.com
-MAIL_PASSWORD=REPLACE_WITH_MAILBOX_SECRET
+MAIL_PASSWORD=
 MAIL_FROM=mailbox@example.com
 
 MCP_RESOURCE_URL=https://mail-api.example.com/mcp
@@ -92,7 +92,7 @@ Once the required environment is injected into your process, start the API:
 go run .
 ```
 
-By default it listens over HTTP on port 8080, on all interfaces. Keep the local port behind your host's access controls; production access needs HTTPS termination. From a second local terminal:
+By default it listens over HTTP on port 8080, on all interfaces. Keep the local port behind your host's access controls; production access needs HTTPS termination. For external-issuer mode, inspect it from a second local terminal. First-party mode intentionally rejects the localhost Host; verify its endpoints at the canonical HTTPS origin after approved setup instead:
 
 ```bash
 curl -sS http://127.0.0.1:8080/healthz
@@ -106,7 +106,7 @@ Check these results:
 - Protected-resource metadata names your intended **public** resource URL and issuer, even when you fetched it locally.
 - An unauthenticated `/mcp` request receives `401` and a `WWW-Authenticate` discovery challenge. A `503` means the API is not configured; it is not a sign-in prompt.
 
-Health checks do not log in to the mailbox, fetch signing keys, or verify Redis. Local development still requires the same valid public resource and issuer configuration. If you use a trusted local MCP test client, it must obtain an issuer-issued token for that configured resource before testing reads. Do not replace the public resource with localhost to bypass authentication. For ChatGPT, continue to the reachable HTTPS deployment below.
+Health checks do not log in to the mailbox, fetch signing keys, or verify Redis. Local development still requires the same valid public resource and issuer configuration. First-party browser and OAuth requests additionally require the fixed canonical hostname and origin; a localhost browser cannot enroll its owner, and preview hostnames do not become alternate issuers. If you use a trusted local MCP test client, it must obtain an issuer-issued token for that configured resource before testing reads. Do not replace the public resource with localhost to bypass authentication. For ChatGPT, continue to the reachable HTTPS deployment below.
 
 ## 5. Deploy the API, then verify reads
 

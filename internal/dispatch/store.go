@@ -5,6 +5,7 @@ package dispatch
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -48,20 +49,20 @@ type Redis struct {
 
 func NewRedis(endpoint, token string) (*Redis, error) {
 	u, e := url.Parse(endpoint)
-	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || len(token) < 8 {
+	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Opaque != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.RawPath != "" || strings.Contains(u.Hostname(), "%") || (u.Port() != "" && u.Port() != "443") || (u.Path != "" && u.Path != "/") || len(token) < 8 || len(token) > 8192 {
 		return nil, errors.New("invalid Redis REST configuration")
 	}
 	d := &net.Dialer{Timeout: 5 * time.Second}
-	tr := &http.Transport{TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 10 * time.Second, DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+	tr := &http.Transport{Proxy: nil, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 10 * time.Second, MaxResponseHeaderBytes: 16 << 10, MaxIdleConns: 8, MaxIdleConnsPerHost: 8, MaxConnsPerHost: 8, IdleConnTimeout: time.Minute, DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, e := net.SplitHostPort(addr)
-		if e != nil {
-			return nil, e
+		if e != nil || port != "443" {
+			return nil, errors.New("invalid Redis destination")
 		}
 		ips, e := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 		if e != nil {
 			return nil, e
 		}
-		if len(ips) == 0 {
+		if len(ips) == 0 || len(ips) > 32 {
 			return nil, errors.New("no Redis addresses")
 		}
 		for _, ip := range ips {
@@ -82,11 +83,17 @@ func NewRedis(endpoint, token string) (*Redis, error) {
 	return &Redis{endpoint: strings.TrimRight(endpoint, "/"), token: token, client: &http.Client{Transport: tr, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("Redis redirects denied") }}}, nil
 }
 func public(ip netip.Addr) bool {
+	if !ip.IsValid() || ip.Zone() != "" {
+		return false
+	}
 	ip = ip.Unmap()
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 		return false
 	}
-	for _, s := range []string{"100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32"} {
+	if ip.Is6() && !netip.MustParsePrefix("2000::/3").Contains(ip) {
+		return false
+	}
+	for _, s := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001::/23", "2001:db8::/32", "2002::/16"} {
 		if netip.MustParsePrefix(s).Contains(ip) {
 			return false
 		}
