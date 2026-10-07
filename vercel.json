@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "go",
-  "buildCommand": "go test ./... && go build -o server ."
+  "buildCommand": "go test -buildvcs=false ./... && go build -buildvcs=false -o server ."
 }

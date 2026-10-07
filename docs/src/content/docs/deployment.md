@@ -25,6 +25,8 @@ Use separate Vercel projects. The existing documentation project and domain rema
 
 Vercel's Go framework preset supports a root `main.go` server listening on `PORT`. The root `vercel.json` selects that preset and builds the API. Vercel reads the Go version/toolchain from `go.mod`. See [Vercel's Go runtime documentation](https://vercel.com/docs/functions/runtimes/go).
 
+The repository build command is `go test -buildvcs=false ./... && go build -buildvcs=false -o server .`. The flag disables only Go's VCS metadata stamping so builds can run when the deployment checkout lacks valid Git metadata. The full Go test suite still runs before the server is built; test failures still block the build.
+
 ## Create a separate API project
 
 Run these commands from the repository root, not from `docs/`:
