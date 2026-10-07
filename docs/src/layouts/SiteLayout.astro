@@ -1,4 +1,5 @@
 ---
+import Arrow from "../components/Arrow.astro";
 import SiteHeader from "zuedocs/components/SiteHeader.astro";
 import "zuedocs/styles.css";
 import "../styles/site.css";
@@ -43,7 +44,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <main id="main-content" tabindex="-1"><slot /></main>
     <footer class="colophon" data-pagefind-ignore>
       <div class="shell colophon__top">
-        <a class="colophon__brand" href="/">Angelos<span aria-hidden="true">↗</span></a>
+        <a class="colophon__brand" href="/">Angelos<span aria-hidden="true"><Arrow /></span></a>
         <p>A thoughtful connection<br />between your agent and your inbox.</p>
         <nav aria-label="Footer">
           <a href="/docs/quickstart">Get connected</a>

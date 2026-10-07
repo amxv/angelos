@@ -202,3 +202,6 @@ em { font-weight: inherit; }
 .reply-letter dl { font-size: .67rem; }.reply-body { font-size: .78rem; }
 @media (max-width: 900px) and (min-width: 769px) { .demo-tool > span:first-child { display: none; } }
 @media (max-width: 430px) { .demo-tool > span:first-child { display: none; }.mail-time { display: none; }.demo-label { font-size: .63rem; }.letter-stack { padding-inline: 12px; } }
+.arrow-icon { display: inline-block; height: 1em; width: 1em; vertical-align: -.12em; flex-shrink: 0; }
+.guide-entrances h2 .arrow-icon, .guide-map h3 .arrow-icon { color: var(--signal); font-size: .7em; }
+.coverage-note, .demo-disclaimer { font-size: .75rem; }

@@ -8,6 +8,12 @@ function synchronizeSidebar() {
   if (!sidebar) return;
   const open = mobile.matches && sidebar.classList.contains("is-open");
   sidebar.inert = mobile.matches && !open;
+  const backdrop = document.querySelector<HTMLButtonElement>("[data-docs-sidebar-close]");
+  if (backdrop) {
+    backdrop.tabIndex = -1;
+    backdrop.setAttribute("aria-hidden", "true");
+    backdrop.inert = !open;
+  }
   if (mobile.matches && !open) sidebar.setAttribute("aria-hidden", "true");
   else sidebar.removeAttribute("aria-hidden");
   if (open) { sidebar.setAttribute("role", "dialog"); sidebar.setAttribute("aria-modal", "true"); }
