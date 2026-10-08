@@ -3,6 +3,10 @@ import { resolve, join, relative, sep } from 'node:path';
 
 // Verify the published HTML, not just source Markdown. No network or dependencies.
 const root = resolve('dist');
+// Keep the visible release label aligned with the maintained tool reference.
+const toolReference = await readFile('src/content/docs/tools.md', 'utf8');
+const release = toolReference.match(/Angelos (\d+\.\d+)\.\d+ exposes/)?.[1];
+if (!release) throw new Error('Tool reference must declare the current Angelos release.');
 async function walk(dir) {
   const files = await readdir(dir, { withFileTypes: true });
   return (await Promise.all(files.map(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : join(dir, entry.name)))).flat();
@@ -15,6 +19,8 @@ const html = new Map(await Promise.all(files.filter(path => path.endsWith('.html
 const errors = [];
 for (const [path, page] of html) {
   const name = relative(root, path);
+  const footer = page.text.match(/<footer\b[^>]*>[\s\S]*?<\/footer>/i)?.[0] || '';
+  if (!footer.includes(`v${release} ·`)) errors.push(`${name}: expected v${release} footer matching the tool reference`);
   const h1s = [...page.text.matchAll(/<h1(?:\s|>)/g)].length;
   if (h1s !== 1) errors.push(`${name}: expected one H1, found ${h1s}`);
   for (const match of page.text.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)) {
@@ -33,4 +39,4 @@ for (const [path, page] of html) {
   }
 }
 if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
-else console.log(`Verified ${html.size} HTML pages: local links, anchors, and one H1 per page.`);
+else console.log(`Verified ${html.size} HTML pages: local links, anchors, release footer, and one H1 per page.`);
