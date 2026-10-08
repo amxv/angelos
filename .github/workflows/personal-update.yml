@@ -30,7 +30,7 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       version: ${{ steps.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
@@ -63,17 +63,17 @@ jobs:
     env:
       ANGELOS_TEST_REDIS_ADDR: 127.0.0.1:6379
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: amxv/angelos
           ref: ${{ needs.plan.outputs.target }}
-          token: ${{ secrets.ANGELOS_UPSTREAM_TOKEN }}
+          token: ${{ secrets.ANGELOS_UPSTREAM_TOKEN || github.token }}
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: '1.4.2'
       # Candidate code executes on a disposable runner with no deploy/write secrets.
@@ -99,11 +99,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
+      # Dependency lifecycle scripts never run, and no token is in this step's
+      # environment. The lockfile comes from the existing trusted fork, not the
+      # candidate. Keep the CLI outside the source tree across git checkout.
+      - name: Install locked deployment CLI before exposing tokens
+        run: |
+          mkdir -p "$RUNNER_TEMP/angelos-cli"
+          cp .github/ci-tools/package.json .github/ci-tools/package-lock.json "$RUNNER_TEMP/angelos-cli/"
+          cd "$RUNNER_TEMP/angelos-cli"
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/vercel --version
       - name: Recheck release and fork on a fresh privileged runner
         id: plan
         env:
@@ -140,10 +150,9 @@ jobs:
           EXPECTED_COMMIT: ${{ needs.plan.outputs.target }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          npm install --global vercel@62.4.0
-          url=$(vercel deploy --prod --skip-domain --yes --meta "angelosCommit=$EXPECTED_COMMIT" --token="$VERCEL_TOKEN")
+          url=$("$RUNNER_TEMP/angelos-cli/node_modules/.bin/vercel" deploy --prod --skip-domain --yes --meta "angelosCommit=$EXPECTED_COMMIT" --token="$VERCEL_TOKEN")
           case "$url" in https://*.vercel.app) ;; *) echo 'Unexpected deployment URL'; exit 1 ;; esac
-          vercel inspect "$url" --wait --timeout=10m --token="$VERCEL_TOKEN"
+          "$RUNNER_TEMP/angelos-cli/node_modules/.bin/vercel" inspect "$url" --wait --timeout=10m --token="$VERCEL_TOKEN"
           python3 "$RUNNER_TEMP/personal_update.py" deployment --url "$url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Promote ready deployment
@@ -151,7 +160,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-        run: vercel promote "$DEPLOYMENT_URL" --yes --token="$VERCEL_TOKEN"
+        run: '"$RUNNER_TEMP/angelos-cli/node_modules/.bin/vercel" promote "$DEPLOYMENT_URL" --yes --token="$VERCEL_TOKEN"'
       - name: Verify canonical deployment identity after promotion or retry
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

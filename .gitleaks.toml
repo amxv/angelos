@@ -1,0 +1,8 @@
+title = "Angelos secret scanning"
+
+[extend]
+useDefault = true
+
+# No repository-wide path, rule, or test-file exemptions. Existing deliberately
+# synthetic fixtures need no custom allowlist with this pinned Gitleaks version.
+# Do not add a broad exception to make a failing scan pass. See SECURITY.md.

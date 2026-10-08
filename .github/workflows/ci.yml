@@ -13,8 +13,10 @@ jobs:
     env:
       ANGELOS_TEST_REDIS_ADDR: 127.0.0.1:6379
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: '1.27.1'
           cache: false
@@ -34,10 +36,29 @@ jobs:
       run:
         working-directory: docs
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: '1.4.2'
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run build
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-pinned Gitleaks
+        run: bash scripts/install-gitleaks.sh "$RUNNER_TEMP/angelos-security-tools"
+      - name: Verify synthetic fixtures and detection boundaries
+        env:
+          GITLEAKS_BIN: ${{ runner.temp }}/angelos-security-tools/gitleaks
+        run: python3 -m unittest discover -s scripts -p 'test_secret_scanning.py' -v
+      - name: Scan complete fetched Git history
+        run: '"$RUNNER_TEMP/angelos-security-tools/gitleaks" git . --log-opts="--all" --config .gitleaks.toml --redact --no-banner --ignore-gitleaks-allow'

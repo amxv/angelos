@@ -10,3 +10,12 @@ docs
 
 /scripts
 /.agents
+
+# Never upload local owner credentials with deployment source.
+.angelos-private/
+.secrets/
+signing-key.pem
+bootstrap-token.txt
+google.env
+microsoft.env
+node_modules/

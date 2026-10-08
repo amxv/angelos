@@ -48,16 +48,21 @@ def env(name):
     return value
 
 
-def api(path, token, method="GET", body=None, base="https://api.github.com"):
+def api(path, token="", method="GET", body=None, base="https://api.github.com"):
     data = None if body is None else json.dumps(body).encode()
+    headers = {"Accept": "application/json", "Content-Type": "application/json",
+               "User-Agent": "angelos-personal-updater"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(base + path, data=data, method=method,
-        headers={"Authorization": "Bearer " + token, "Accept": "application/json",
-                 "Content-Type": "application/json", "User-Agent": "angelos-personal-updater"})
+                                     headers=headers)
     try:
         return request_json(request)
     except urllib.error.HTTPError as error:
         if error.code == 404 and path.endswith("/releases/latest"):
-            raise Stop("No accessible published stable upstream release is available; verify private access or wait for the first tested release.") from None
+            raise Stop("No accessible published stable upstream release is available; wait for a tested release or verify optional private-upstream access.") from None
+        if error.code == 403 and error.headers.get("X-RateLimit-Remaining") == "0":
+            raise Stop("GitHub API rate limit reached; retry after the reset. No update was applied.") from None
         raise Stop(f"Service request failed ({error.code}); check access and Actions logs. No settings changed.") from None
     except (OSError, ValueError):
         raise Stop("Service unavailable or returned invalid JSON; no credentials were logged.") from None
@@ -119,7 +124,10 @@ def plan():
     base = git("rev-parse", "HEAD")
     current = api(f"/repos/{repository}/git/ref/heads/main", env("GH_TOKEN"))["object"]["sha"]
     require(base == current, "Fork changed since checkout; rerun on current main.")
-    token = env("ANGELOS_UPSTREAM_TOKEN")
+    # Public release metadata and Git fetches need no PAT. Keep the fork's
+    # GITHUB_TOKEN scoped to its own repository; optional read-only upstream
+    # credentials support private access without changing the trust checks.
+    token = os.environ.get("ANGELOS_UPSTREAM_TOKEN", "")
     identity = api(f"/repos/{UPSTREAM}", token)
     require(identity.get("id") == UPSTREAM_ID and identity.get("full_name") == UPSTREAM, "Upstream repository identity changed; manual review required.")
     release = api(f"/repos/{UPSTREAM}/releases/latest", token)

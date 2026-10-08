@@ -8,3 +8,15 @@
 *.log
 
 __pycache__/
+
+# Local owner credentials and outputs from the setup guides. Keep these outside
+# the checkout; these narrowly named exclusions are a second line of defense.
+.angelos-private/
+.secrets/
+signing-key.pem
+bootstrap-token.txt
+google.env
+microsoft.env
+
+# Locked CI tooling is tracked; installed packages are not.
+node_modules/

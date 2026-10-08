@@ -12,6 +12,28 @@ import personal_update as update
 
 
 class PolicyTests(unittest.TestCase):
+    def test_public_api_omits_authorization_entirely(self):
+        with patch.object(update, "request_json", return_value={}) as request:
+            update.api("/repos/amxv/angelos")
+        self.assertIsNone(request.call_args.args[0].get_header("Authorization"))
+
+    def test_optional_private_api_uses_explicit_upstream_token(self):
+        with patch.object(update, "request_json", return_value={}) as request:
+            update.api("/repos/amxv/angelos", "fixture-private-read-token")
+        self.assertEqual(request.call_args.args[0].get_header("Authorization"), "Bearer fixture-private-read-token")
+
+    def test_askpass_restricts_private_token_to_github(self):
+        script = Path(__file__).resolve().parent / "upstream-askpass.sh"
+        for prompt, token, code, output in (
+            ("Username for 'https://github.com': ", "fixture-private-read", 0, "x-access-token\n"),
+            ("Password for 'https://x-access-token@github.com': ", "fixture-private-read", 0, "fixture-private-read\n"),
+            ("Password for 'https://github.com.evil.test': ", "fixture-private-read", 1, ""),
+            ("Password for 'https://x-access-token@github.com': ", "", 1, ""),
+        ):
+            with self.subTest(prompt=prompt, configured=bool(token)):
+                result = subprocess.run(["sh", str(script), prompt], env={"ANGELOS_UPSTREAM_TOKEN": token}, text=True, capture_output=True)
+                self.assertEqual((result.returncode, result.stdout), (code, output))
+
     def test_strict_stable_tags(self):
         for tag in ("v0.9.0", "v1.20.3"):
             self.assertEqual(update.stable_release({"tag_name": tag}), tag)
@@ -106,10 +128,18 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("persist-credentials: false", validate)
         deploy = workflow.split("  deploy:", 1)[1].split("  report:", 1)[0]
         self.assertIn("needs: [plan, validate]", deploy)
-        self.assertLess(deploy.index("VALIDATED_TARGET"), deploy.index("vercel deploy"))
+        self.assertLess(deploy.index("VALIDATED_TARGET"), deploy.index('vercel" deploy'))
         self.assertLess(deploy.index("--require-current"), deploy.index(" finish --base"))
         self.assertIn("--skip-domain", deploy)
         self.assertIn('cp scripts/upstream-askpass.sh "$RUNNER_TEMP/angelos-askpass"', deploy)
+        install = deploy.split("      - name: Install locked deployment CLI before exposing tokens", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("npm ci --ignore-scripts", install)
+        self.assertIn("package-lock.json", install)
+        self.assertNotIn("TOKEN", install)
+        self.assertNotIn("secrets.", install)
+        self.assertLess(deploy.index("npm ci"), deploy.index("VERCEL_TOKEN"))
+        self.assertNotIn("npm install", deploy)
+        self.assertIn("secrets.ANGELOS_UPSTREAM_TOKEN || github.token", validate)
 
 
 class ReleaseFixtureTests(unittest.TestCase):
@@ -178,6 +208,31 @@ class ReleaseFixtureTests(unittest.TestCase):
         self.assertTrue(result["changed"])
         self.assertEqual(result["target"], self.target)
         self.assertEqual(self.real_git("rev-parse", "HEAD"), self.base)  # plan never advances source
+
+    def test_public_upstream_requires_no_personal_token(self):
+        os.environ.pop("ANGELOS_UPSTREAM_TOKEN")
+        original = self.api
+        tokens = []
+        def public(path, token):
+            if path.startswith("/repos/" + update.UPSTREAM):
+                tokens.append(token)
+            else:
+                self.assertEqual(token, "fixture")  # own repository only
+            return original(path, token)
+        self.api = public
+        self.assertTrue(self.plan()["changed"])
+        self.assertTrue(tokens)
+        self.assertEqual(set(tokens), {""})
+
+    def test_private_upstream_token_remains_optional_and_scoped(self):
+        os.environ["ANGELOS_UPSTREAM_TOKEN"] = "fixture-private-read-token"
+        original = self.api
+        def private(path, token):
+            expected = "fixture-private-read-token" if path.startswith("/repos/" + update.UPSTREAM) else "fixture"
+            self.assertEqual(token, expected)
+            return original(path, token)
+        self.api = private
+        self.assertTrue(self.plan()["changed"])
 
     def test_no_change(self):
         self.real_git("checkout", "--detach", self.target)

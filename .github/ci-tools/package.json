@@ -1,0 +1,8 @@
+{
+  "name": "angelos-ci-tools",
+  "private": true,
+  "description": "Locked deployment tooling; never included in the application deployment.",
+  "dependencies": {
+    "vercel": "62.4.0"
+  }
+}
