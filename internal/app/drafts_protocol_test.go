@@ -248,6 +248,20 @@ func TestDraftConflictAndSourceFailuresNeverMutate(t *testing.T) {
 					if r["error_code"] != "conflict" {
 						t.Fatalf("wrong conflict code: %#v", r)
 					}
+					const message = "draft source changed; read the draft again before revising or preparing"
+					const recovery = "Read the complete draft again and review its new source_digest before revising or preparing. The original was not changed by this operation."
+					if r["error"] != message || r["recovery"] != recovery || r["retry_safe"] != false || r["outcome"] != nil {
+						t.Fatalf("incorrect draft conflict guidance: %#v", r)
+					}
+					retry := r["retry"].(map[string]any)
+					if retry["action"] != "refresh_reference" || retry["transport_retry_safe"] != false {
+						t.Fatalf("draft conflict retry semantics changed: %#v", retry)
+					}
+					content := out["result"].(map[string]any)["content"].([]any)
+					var textPayload map[string]any
+					if err := json.Unmarshal([]byte(content[0].(map[string]any)["text"].(string)), &textPayload); err != nil || !reflect.DeepEqual(textPayload, r) {
+						t.Fatalf("text and structured conflict payloads differ: %v", err)
+					}
 				}
 			})
 		}

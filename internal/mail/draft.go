@@ -24,7 +24,16 @@ type Draft struct {
 	Warnings []string `json:"warnings"`
 }
 
-var ErrDraftChanged = fmt.Errorf("draft source changed; read the draft again before revising or preparing: %w", ErrConflict)
+// Keep the conflict identity without appending flag-specific guidance to drafts.
+var ErrDraftChanged error = draftChangedError{}
+
+type draftChangedError struct{}
+
+func (draftChangedError) Error() string {
+	return "draft source changed; read the draft again before revising or preparing"
+}
+
+func (draftChangedError) Unwrap() error { return ErrConflict }
 
 func (b *Backend) ReadDraft(ctx context.Context, ref Reference) (Draft, error) {
 	source, err := b.readRaw(ctx, ref)

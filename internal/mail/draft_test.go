@@ -13,6 +13,17 @@ import (
 	"time"
 )
 
+func TestDraftChangedErrorRetainsConflictIdentity(t *testing.T) {
+	const want = "draft source changed; read the draft again before revising or preparing"
+	if ErrDraftChanged.Error() != want {
+		t.Fatalf("draft guidance = %q, want %q", ErrDraftChanged.Error(), want)
+	}
+	wrapped := fmt.Errorf("wrapped: %w", ErrDraftChanged)
+	if !errors.Is(wrapped, ErrDraftChanged) || !errors.Is(wrapped, ErrConflict) {
+		t.Fatal("draft conflict identity was lost")
+	}
+}
+
 func draftFixture(raw, flags, extra string, trace *imapTrace) func(net.Conn) {
 	return func(c net.Conn) {
 		fmt.Fprint(c, "* OK [CAPABILITY IMAP4rev1] draft fixture\r\n")
