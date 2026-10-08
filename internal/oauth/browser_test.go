@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -508,8 +510,13 @@ func TestBrowserCSRFCSPAndFailureBoundaries(t *testing.T) {
 	}
 	response := h.get("/oauth/login")
 	csp := response.Header().Get("Content-Security-Policy")
-	if strings.Contains(csp, "unsafe-inline") || !strings.Contains(csp, "frame-ancestors 'none'") || response.Header().Get("Referrer-Policy") != "no-referrer" || response.Header().Get("Cache-Control") != "no-store" {
+	if strings.Contains(csp, "unsafe-inline") || !strings.Contains(csp, "frame-ancestors 'none'") || response.Header().Get("Referrer-Policy") != "same-origin" || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("browser protections missing")
+	}
+	// Only rendered HTML forms relax the referrer policy to same-origin. The
+	// general OAuth endpoints, errors and assets must not disclose referrers.
+	if got := h.get("/oauth/assets/app.js").Header().Get("Referrer-Policy"); got != "no-referrer" {
+		t.Fatal("asset referrer policy changed", got)
 	}
 	if strings.Contains(response.Body.String(), "<script>") || !strings.Contains(response.Body.String(), "/oauth/assets/app.js") {
 		t.Fatal("inline script")
@@ -591,6 +598,9 @@ func TestBrowserFullAuthorizationPasskeyConsentCodeExchangeAndRevoke(t *testing.
 	if response.Code != 200 {
 		t.Fatal(response.Code, response.Body.String())
 	}
+	if got := response.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Fatal("native consent form must use same-origin referrer policy", got)
+	}
 	for _, text := range []string{"Test Client", "test@example.com", "mail.write", "mail.send", "permanently delete", "cannot be undone", "https://client.example.com/callback"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Fatalf("consent omitted %q", text)
@@ -641,6 +651,9 @@ func TestBrowserFullAuthorizationPasskeyConsentCodeExchangeAndRevoke(t *testing.
 	}
 	if response = h.get("/oauth/grants"); response.Code != 200 || !strings.Contains(response.Body.String(), "mail.read, mail.send") {
 		t.Fatal("grant missing")
+	}
+	if got := response.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Fatal("native grant/revoke form must use same-origin referrer policy", got)
 	}
 	if response = h.form("/oauth/grants", url.Values{"grant": {claims.GrantID}}); response.Code != 303 {
 		t.Fatal(response.Code, response.Body.String())
@@ -715,11 +728,57 @@ func TestPasskeyExpiredCeremonyAndLoginCSPRemainClosed(t *testing.T) {
 	if strings.Contains(csp, "client.example.com") || !strings.Contains(csp, "form-action 'self';") {
 		t.Fatal("consent exception leaked to login policy")
 	}
-	for _, headers := range []http.Header{{"Origin": {Issuer, Issuer}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"same-origin", "cross-site"}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"cross-site"}}} {
+	for _, headers := range []http.Header{{"Origin": {"null"}}, {"Origin": {Issuer, Issuer}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"same-origin", "cross-site"}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"cross-site"}}} {
 		r := httptest.NewRequest("POST", Issuer+"/oauth/logout", nil)
 		r.Header = headers
 		if browserOrigin(r) {
 			t.Fatal("ambiguous/cross-site origin accepted")
 		}
 	}
+	for _, headers := range []http.Header{{"Origin": {Issuer}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"same-origin"}}} {
+		r := httptest.NewRequest("POST", Issuer+"/oauth/logout", nil)
+		r.Header = headers
+		if !browserOrigin(r) {
+			t.Fatal("legitimate same-origin browser submission rejected")
+		}
+	}
+}
+
+// Opt-in, synthetic-only visual fixtures let us inspect all three private
+// browser pages in a real browser without logging in to the production mailbox.
+// Serve the output directory over a temporary localhost HTTP server.
+func TestExportOAuthVisualFixtures(t *testing.T) {
+	dir := os.Getenv("ANGELOS_OAUTH_VISUAL_FIXTURES")
+	if dir == "" {
+		t.Skip("set ANGELOS_OAUTH_VISUAL_FIXTURES to export synthetic HTML/CSS for visual QA")
+	}
+	assets := filepath.Join(dir, "oauth", "assets")
+	if err := os.MkdirAll(assets, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"app.css": browserCSS, "app.js": browserJS} {
+		if err := os.WriteFile(filepath.Join(assets, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := newBrowserHarness(t)
+	write := func(name string, response *httptest.ResponseRecorder) {
+		t.Helper()
+		if response.Code != 200 {
+			t.Fatalf("%s: HTTP %d", name, response.Code)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name+".html"), response.Body.Bytes(), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("login", h.get("/oauth/login"))
+	h.enroll()
+	write("signin", h.get("/oauth/login"))
+	id, _ := h.authorize("mail.read mail.write mail.send")
+	write("consent", h.get("/oauth/consent?request="+id))
+	response := h.form("/oauth/consent", url.Values{"request": {id}, "decision": {"approve"}, "scope": {"mail.read", "mail.write", "mail.send"}})
+	if response.Code != http.StatusSeeOther {
+		t.Fatal("synthetic consent failed", response.Code)
+	}
+	write("grants", h.get("/oauth/grants"))
 }
