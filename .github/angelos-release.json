@@ -3,5 +3,5 @@
   "automatic": true,
   "config_epoch": 1,
   "state_epoch": 1,
-  "notes": "Single-owner deployment; no configuration or stored-state migration."
+  "notes": "Backward-compatible optional initial OAuth scopes; existing grants, runtime defaults, and v1 state are preserved. Personal updater workflow changes require manual review/sync before automatic updates resume."
 }

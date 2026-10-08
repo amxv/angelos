@@ -6,7 +6,7 @@ order: 12
 category: Use your inbox
 ---
 
-Angelos 0.10.0 exposes six MCP tools and 25 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
+Angelos 0.11.0 exposes six MCP tools and 25 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
 
 ## 1. Discover capabilities and permissions
 

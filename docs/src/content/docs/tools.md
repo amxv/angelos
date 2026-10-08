@@ -18,7 +18,7 @@ Check capabilities before assuming an operation is available. The IMAP UID, fold
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.10.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access, including explicit nulls inside message objects. Optional search `unread`/`flagged` filters retain their legacy null-as-omitted behavior. There is no arbitrary command input.
+Angelos 0.11.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access, including explicit nulls inside message objects. Optional search `unread`/`flagged` filters retain their legacy null-as-omitted behavior. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
