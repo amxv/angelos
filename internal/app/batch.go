@@ -58,7 +58,10 @@ func (a *App) readMany(ctx context.Context, in queryInput) (any, error) {
 	}
 	seen := make(map[mail.Reference]bool)
 	for _, ref := range in.References {
-		valid := len(ref.Folder) > 0 && len(ref.Folder) <= 1024 && utf8.ValidString(ref.Folder) && ref.UID != 0 && ref.UIDValidity != 0
+		valid := ref.Provider == "" && ref.ID == "" && ref.Account == "" && len(ref.Folder) > 0 && len(ref.Folder) <= 1024 && utf8.ValidString(ref.Folder) && ref.UID != 0 && ref.UIDValidity != 0
+		if ref.Provider == "microsoft_graph" {
+			valid = mail.ValidGraphReference(ref)
+		}
 		for _, r := range ref.Folder {
 			if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 				valid = false

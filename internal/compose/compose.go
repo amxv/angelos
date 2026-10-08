@@ -47,6 +47,7 @@ type Input struct {
 	PreserveEmptyText bool         `json:"-"` // An existing or explicitly cleared draft alternative, not HTML-only authorship.
 }
 type Prepared struct {
+	Transport   string              `json:"transport,omitempty"`
 	ID          string              `json:"id"`
 	Digest      string              `json:"digest"`
 	From        string              `json:"from"`
@@ -478,4 +479,27 @@ func WireDigest(from string, recipients []string, raw []byte) string {
 	}{from, recipients, raw})
 	sum := sha256.Sum256(binding)
 	return hex.EncodeToString(sum[:])
+}
+
+// ForMicrosoftGraph binds exact Bcc-bearing MIME to a provider-specific digest.
+// Graph has no SMTP envelope; it derives every recipient from these MIME headers.
+func ForMicrosoftGraph(p Prepared) (Prepared, error) {
+	raw, err := DraftBytes(p)
+	if err != nil {
+		return Prepared{}, err
+	}
+	if len(raw) > (3<<20)-1024 {
+		return Prepared{}, errors.New("Graph MIME exceeds the safe request limit")
+	}
+	p.Transport = "microsoft_graph"
+	p.Raw = raw
+	p.Digest = PreparedDigest(p)
+	p.Warnings = append(p.Warnings, "Microsoft Graph saves Sent automatically. Accepted means queued by Microsoft, not delivered. Never automatically retry an unknown submission.")
+	return p, nil
+}
+func PreparedDigest(p Prepared) string {
+	if p.Transport == "" {
+		return WireDigest(p.From, p.Recipients, p.Raw)
+	}
+	return WireDigest(p.Transport+"\x00"+p.From, p.Recipients, p.Raw)
 }

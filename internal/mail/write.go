@@ -69,7 +69,7 @@ func (c *observeModifiedConn) Read(data []byte) (int, error) {
 }
 
 func validWriteReference(ref Reference) bool {
-	return validFolder(ref.Folder) && ref.UIDValidity != 0 && ref.UID != 0
+	return ref.Provider == "" && ref.ID == "" && ref.Account == "" && validFolder(ref.Folder) && ref.UIDValidity != 0 && ref.UID != 0
 }
 
 // No CLOSE, ordinary EXPUNGE, or library MOVE fallback is used anywhere here.

@@ -39,6 +39,14 @@ Status/search regressions cover signed OAuth principal isolation and challenges,
 
 Gmail tests use synthetic Google-host TLS certificates and injected loopback transports, never real accounts or refresh grants. Coverage includes IMAP with/without SASL-IR, SMTP TLS/STARTTLS, exact XOAUTH2 payloads, challenge termination, no credential downgrade, verified TLS before credentials, token refresh expiry/cancellation/concurrency/response bounds/redaction, and generation-safe invalidation. Signed MCP fixtures verify duplicate-Sent rejection before claim, one SMTP dispatch without explicit Sent APPEND, deletion guards, localized LIST roles, native MOVE requirements, and preserved legacy-provider behavior.
 
+## Microsoft Graph fixtures
+
+Graph tests use synthetic HTTPS transports and mailbox data, never a real Microsoft account. They cover folder-tree discovery/create/rename, bounded raw MIME reads and attachments, structured drafts with Bcc/HTML/attachments, full draft retrieval beyond display truncation, rejection of semantic MIME changes while allowing explicitly inert Exchange transport metadata, filtered search and cursor integrity, native references, move/Seen changes, and exact prepared/send bytes with unknown outcomes after a lost response. Copy and Trash share the transfer implementation; synthetic coverage is not a separate live validation of each operation.
+
+The initial-grant helper has separate synthetic tests for its command inputs, protected output paths, secure credential inputs, PKCE/state callback validation, pinned network origins, bounded timeouts, scope/identity checks, and secret-safe failures. Run `python3 -m unittest discover -s scripts -p 'test_microsoft_grant.py' -v` from the repository root; these tests do not perform real consent or provision credentials.
+
+Keep the native-reference schema budget and existing IMAP fixtures intact when changing Graph. The durable token-store fixtures cover encryption and identity binding, tamper/wrong-key failures, concurrent/cold-start rotation, read/commit failures, timeouts and lost responses without OAuth retry, and partial loss of initialized state. An ephemeral Redis integration validates the Lua compare-and-set behavior and lack of automatic expiry; keep it enabled for the full release check. A passing fake Graph exchange does not prove Entra registration, owner/admin consent, Conditional Access eligibility, token lifecycle, or delivery in an actual tenant. Use the [Microsoft reference](/docs/microsoft) for capability differences and the canonical setup guide for real-account read-only acceptance.
+
 ## Inbox workflow regressions
 
 The inbox test suite covers the two new query routes through signed OAuth/MCP requests as well as bounded TLS IMAP fixtures. Check these behaviors when changing triage or conversation code:

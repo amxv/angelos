@@ -177,3 +177,11 @@ HTML-only incoming mail collapses excess blank lines and may retain bounded abso
 ### Version 0.9 discovery measurement
 
 On the complete deterministic six-tool fixture, compact UTF-8 JSON is **11,433 → 11,383 bytes** (including both OAuth metadata declarations). A local expansion of `$ref` with `$defs` removed is **12,299 → 12,294 bytes**. These small reductions accompany more complete first-use guidance; they are not token counts or measured connector-context savings. Connectors can expand references or otherwise transform discovery. Both complete forms have regression checks against the unchanged 0.8 snapshot; the original 17-tool baseline and prior historical measurements remain intact. Preparation previews and review-critical content are never shortened.
+
+## Version 0.10 personal instances and Microsoft Graph
+
+Refresh MCP tool definitions after upgrading. Existing IMAP references retain their folder/UIDVALIDITY/UID identity. Microsoft Graph returns provider/account/native-ID references instead; clients must preserve the whole returned object and never synthesize an IMAP UID for it. Native folder IDs, received-date cursors, automatic Sent filing, and unsupported conversation/MODSEQ/permanent-delete actions are documented in the [Microsoft reference](/docs/microsoft#mailbox-behavior). Inspect actual capabilities before choosing an operation.
+
+The iCloud and Yahoo presets use explicit provider app passwords and pinned documented TLS endpoints. Each person still has a separate deployment and mailbox. The optional [personal updater](/docs/keep-updated) follows eligible stable releases while retaining runtime settings and durable state; it does not migrate owners into a shared service.
+
+For this release, measured six-tool discovery JSON is 11,742 bytes versus the historical 17-tool baseline of 14,886 bytes. Input schemas are 8,293 bytes (previous snapshot 7,695); the expanded comparison is 12,712 bytes versus 12,299 for 0.8. These are distinct measurements, not interchangeable token counts or a claim that the new schema shrank. The regression budget adds a bounded 512-byte allowance for Graph references while retaining the historical fixtures.

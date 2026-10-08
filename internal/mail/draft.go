@@ -40,6 +40,12 @@ func (b *Backend) ReadDraft(ctx context.Context, ref Reference) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
+	return draftFromMessage(source)
+}
+
+func draftFromMessage(source Message) (Draft, error) { return draftFromSource(source, source.raw) }
+
+func draftFromSource(source Message, parsingRaw []byte) (Draft, error) {
 	if source.Truncated || len(source.raw) == 0 || source.Size != int64(len(source.raw)) {
 		return Draft{}, ErrLimit
 	}
@@ -55,7 +61,7 @@ func (b *Backend) ReadDraft(ctx context.Context, ref Reference) (Draft, error) {
 	if !draft {
 		return Draft{}, fmt.Errorf("source must have the Draft flag: %w", ErrInvalidInput)
 	}
-	parsed, err := compose.ParseDraft(source.raw)
+	parsed, err := compose.ParseDraft(parsingRaw)
 	if err != nil {
 		return Draft{}, fmt.Errorf("%w: %v", ErrUnsupported, err)
 	}

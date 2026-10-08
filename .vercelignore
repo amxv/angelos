@@ -7,3 +7,6 @@ docs
 /server
 /coverage.out
 /tools
+
+/scripts
+/.agents

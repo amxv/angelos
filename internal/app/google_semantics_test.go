@@ -150,7 +150,7 @@ func TestGmailScopesAndSendGatesRemainRequired(t *testing.T) {
 }
 
 func TestGmailDiscoveryContainsRestrictionsAndVersion(t *testing.T) {
-	if Version != "0.9.0" {
+	if Version != "0.10.0" {
 		t.Fatalf("version: %s", Version)
 	}
 	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
@@ -169,7 +169,7 @@ func TestGmailDiscoveryContainsRestrictionsAndVersion(t *testing.T) {
 			}
 		case "mail_send_confirmed":
 			field := tool["inputSchema"].(map[string]any)["properties"].(map[string]any)["append_sent"].(map[string]any)["description"].(string)
-			if !strings.Contains(field, "False if mail_query capabilities says smtp_stores_sent (Gmail)") {
+			if !strings.Contains(field, "False if mail_query capabilities says smtp_stores_sent (Gmail/Graph)") {
 				t.Fatal(field)
 			}
 		}

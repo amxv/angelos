@@ -15,14 +15,22 @@ func searchSummary(page mail.SearchResult, folder string) result {
 	for _, m := range page.Messages {
 		row := summaryFields(m)
 		delete(row, "reference")
-		row["uid"] = m.Reference.UID
+		if m.Reference.Provider == "" {
+			row["uid"] = m.Reference.UID
+		}
 		// Defensive fallback preserves unexpected backend identities without inventing one.
-		if m.Reference.Folder != folder || m.Reference.UIDValidity != page.UIDValidity {
+		if m.Reference.Provider != "" || m.Reference.Folder != folder || m.Reference.UIDValidity != page.UIDValidity {
 			row["reference"] = m.Reference
 		}
 		rows = append(rows, row)
 	}
 	out := result{"folder": folder, "uid_validity": page.UIDValidity, "messages": rows, "scanned_uids": page.ScannedUIDs, "order": page.Order}
+	if page.Provider != "" {
+		out["provider"] = page.Provider
+		out["warnings"] = page.Warnings
+		delete(out, "uid_validity")
+		delete(out, "scanned_uids")
+	}
 	if page.NextCursor != "" {
 		out["next_cursor"] = page.NextCursor
 	}

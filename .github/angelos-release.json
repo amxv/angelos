@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "automatic": true,
+  "config_epoch": 1,
+  "state_epoch": 1,
+  "notes": "Single-owner deployment; no configuration or stored-state migration."
+}

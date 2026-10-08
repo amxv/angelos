@@ -17,14 +17,18 @@ var (
 )
 
 type Folder struct {
-	Name       string   `json:"name"`
-	Delimiter  string   `json:"delimiter"`
-	Attributes []string `json:"attributes"`
+	DisplayName string   `json:"display_name,omitempty"`
+	Name        string   `json:"name"`
+	Delimiter   string   `json:"delimiter"`
+	Attributes  []string `json:"attributes"`
 }
 type Reference struct {
 	Folder      string `json:"folder"`
-	UIDValidity uint32 `json:"uid_validity"`
-	UID         uint32 `json:"uid"`
+	UIDValidity uint32 `json:"uid_validity,omitempty"`
+	UID         uint32 `json:"uid,omitempty"`
+	Provider    string `json:"provider,omitempty"`
+	Account     string `json:"account,omitempty"`
+	ID          string `json:"id,omitempty"`
 }
 type Address struct {
 	Name    string `json:"name,omitempty"`
@@ -64,6 +68,8 @@ type SearchRequest struct {
 	Attention bool `json:"attention,omitempty"`
 }
 type SearchResult struct {
+	Provider    string    `json:"provider,omitempty"`
+	Warnings    []string  `json:"warnings,omitempty"`
 	Messages    []Summary `json:"messages"`
 	NextCursor  string    `json:"next_cursor,omitempty"`
 	UIDValidity uint32    `json:"uid_validity"`

@@ -19,6 +19,9 @@ var (
 // mailbox and the caller's write/delete gates still need separate checks.
 // SMTPStoresSent describes the SMTP configuration, never an IMAP inference.
 type Capabilities struct {
+	Provider        string              `json:"provider,omitempty"`
+	SupportedFlags  []string            `json:"supported_flags,omitempty"`
+	Warnings        []string            `json:"warnings,omitempty"`
 	IMAP            []string            `json:"imap"`
 	Move            bool                `json:"move"`
 	UIDExpunge      bool                `json:"uid_expunge"`

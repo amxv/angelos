@@ -12,9 +12,13 @@ All tools require a valid owner token with `mail.read`. Write and send tools add
 
 Mail text, headers, filenames, and attachment data are untrusted. See [Safety and permissions](/docs/safety).
 
+## Provider-specific behavior
+
+Check capabilities before assuming an operation is available. The IMAP UID, folder-name, scan, and MODSEQ details below apply to IMAP providers. Microsoft uses delegated Graph: copy returned account-bound `reference` objects and native folder IDs unchanged. It uses received-date paging without UID snapshots, supports only Seen/Flagged flag changes, and does not support conversation traversal, conditional MODSEQ changes, or permanent deletion. Graph sends save Sent automatically; use `append_sent: false`. A queued Graph send is not delivery confirmation. See [Microsoft Graph details](/docs/microsoft#mailbox-behavior).
+
 ## Six tools, grouped by permission and risk
 
-Angelos 0.9.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access, including explicit nulls inside message objects. Optional search `unread`/`flagged` filters retain their legacy null-as-omitted behavior. There is no arbitrary command input.
+Angelos 0.10.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access, including explicit nulls inside message objects. Optional search `unread`/`flagged` filters retain their legacy null-as-omitted behavior. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -22,8 +26,8 @@ Angelos 0.9.0 exposes six tools for 25 operations, including bounded batch readi
 | `mail_create` | `mail.write` | Non-destructive, closed-world |
 | `mail_modify` | `mail.write` | Destructive, closed-world |
 | `mail_delete_permanently` | `mail.write` | Destructive, closed-world; separate irreversible-delete gate |
-| `mail_prepare` | `mail.send` | Non-destructive, closed-world; no SMTP submission |
-| `mail_send_confirmed` | `mail.send` | Destructive, open-world; actual SMTP submission |
+| `mail_prepare` | `mail.send` | Non-destructive, closed-world; no provider submission |
+| `mail_send_confirmed` | `mail.send` | Destructive, open-world; actual provider submission |
 
 The tool-level consent boundaries are deliberately separate. None promises idempotency through its MCP annotation. See [Migration and token budget](/docs/tool-migration) for the complete old-to-new mapping and measured size changes.
 
@@ -306,7 +310,7 @@ Repeated calls for a consumed ID return its recorded status without another SMTP
 
 ## Outside the current surface
 
-There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, sorting by subject/sent date, active HTML rendering, bulk global expunge, or folder deletion. Gmail/Workspace has server-side XOAUTH2 with owner-provisioned credentials, not an interactive consent UI. Gmail API transport, label APIs, X-GM-RAW queries, global message/thread IDs, and service-account delegation are not exposed. Other OAuth mail providers require an implementation change. See [Gmail and Google Workspace](/docs/gmail-workspace).
+There is no server-side rule/Sieve administration, Apple Mail local-rule editing, account provisioning, sorting by subject/sent date, active HTML rendering, bulk global expunge, or folder deletion. Gmail/Workspace has server-side XOAUTH2 with owner-provisioned credentials, not an interactive consent UI. Gmail API transport, label APIs, X-GM-RAW queries, global message/thread IDs, and service-account delegation are not exposed. Microsoft Outlook.com/365 uses the dedicated Graph adapter described above; other OAuth mail providers require an implementation change. See [Gmail and Google Workspace](/docs/gmail-workspace).
 
 
 

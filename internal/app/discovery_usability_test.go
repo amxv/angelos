@@ -73,7 +73,7 @@ func TestDiscoveryUsabilityAndSize(t *testing.T) {
 		case "mail_prepare":
 			want = []string{"omit for eml/none", "new/forward need recipients", "never Bcc"}
 		case "mail_send_confirmed":
-			want = []string{"digest from the approved mail_prepare preview", "False if mail_query capabilities says smtp_stores_sent (Gmail)", "not delivery", "never resend/duplicate"}
+			want = []string{"digest from the approved mail_prepare preview", "False if mail_query capabilities says smtp_stores_sent (Gmail/Graph)", "not delivery", "never resend/duplicate"}
 		}
 		for _, needle := range want {
 			if !strings.Contains(string(data), needle) {
@@ -93,8 +93,11 @@ func TestDiscoveryUsabilityAndSize(t *testing.T) {
 	newJSON, _ := json.Marshal(current)
 	oldExpanded, _ := json.Marshal(expandToolDiscovery(old))
 	newExpanded, _ := json.Marshal(expanded)
-	if len(newJSON) > len(oldJSON) || len(newExpanded) > len(oldExpanded) {
-		t.Fatalf("first-use discovery grew: JSON %d -> %d; expanded %d -> %d", len(oldJSON), len(newJSON), len(oldExpanded), len(newExpanded))
+	// 0.10 adds account-bound opaque Graph references plus provider safety notes.
+	// Keep the unchanged historical fixture and a bounded allowance for both representations.
+	const graphDiscoveryAllowance = 512
+	if len(newJSON) > len(oldJSON)+graphDiscoveryAllowance || len(newExpanded) > len(oldExpanded)+graphDiscoveryAllowance {
+		t.Fatalf("first-use discovery exceeded the 512-byte Graph allowance: JSON %d -> %d; expanded %d -> %d", len(oldJSON), len(newJSON), len(oldExpanded), len(newExpanded))
 	}
 	t.Logf("Complete six-tool JSON bytes: %d -> %d; locally expanded $ref bytes: %d -> %d (not tokenizer or connector measurements)", len(oldJSON), len(newJSON), len(oldExpanded), len(newExpanded))
 }

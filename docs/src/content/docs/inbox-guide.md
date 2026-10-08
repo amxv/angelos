@@ -8,6 +8,8 @@ category: Use your inbox
 
 Start by asking for information. Once you know which messages matter, decide whether to reply or change the mailbox. Reading, searching, and looking up related messages leave read status and other flags unchanged.
 
+For Microsoft Graph, use returned native folder IDs and complete message references. Its pagination follows received time rather than a fixed IMAP UID snapshot; conversation traversal is unavailable. Check capabilities first and read the [Microsoft-specific limits](/docs/microsoft#mailbox-behavior).
+
 ## Find your starting point
 
 > Show me unread or flagged messages in INBOX from this week. Read the relevant messages, then suggest which need my attention and explain why. Leave the mailbox unchanged.

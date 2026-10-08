@@ -1,19 +1,23 @@
 # Angelos
 
-An agent-native email interface in Go. Angelos exposes a single existing IMAP/SMTP mailbox through a private, OAuth-protected remote MCP server. Your other mail clients can keep using the same account.
+An agent-native email interface in Go. Angelos exposes a single existing mailbox (TLS IMAP/SMTP or delegated Microsoft Graph) through a private, OAuth-protected remote MCP server. Your other mail clients can keep using the same account.
 
-The repository is private while under active development and is intended to be open sourced later. Optional mailbox writes, permanent deletion, and SMTP sending are disabled by default.
+The repository is private while under active development and is intended to be open sourced later. Optional mailbox writes, permanent deletion, and sending are disabled by default.
 
 ## Get connected
 
-Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One guide takes you from your own Vercel deployment to your first read-only ChatGPT inbox request.
+Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One agent-led guide takes you from a personal fork and your own Vercel/Upstash accounts to your first read-only ChatGPT inbox request. Your agent handles installation and verification; you complete approvals, secure credential entry, passkeys, and custom-app consent. Coding agents can use the [personal setup skill](./.agents/skills/setup-personal-angelos/SKILL.md).
+
+After connecting, optionally enable the [daily release updater](./docs/src/content/docs/keep-updated.md). Each person keeps a separate instance; updates preserve the existing domain, environment, Redis database, and owner identity.
 
 ## Capabilities
 
+- Spacemail, iCloud, Yahoo, and custom TLS IMAP/SMTP presets; iCloud/Yahoo require provider app passwords
+- Outlook.com and eligible Microsoft 365 delegated Graph access with account-bound references and native Sent filing
 - Gmail/Workspace XOAUTH2 for personal/internal use, with pinned hosts and conservative Sent/delete safeguards
 - Six risk-separated MCP tools cover 25 operations with compact schemas and optional full-detail message results
 - Read up to ten selected messages in one bounded call, with explicit per-item errors and continuation
-- Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links
+- Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links on supported IMAP providers
 - Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
 - Inspect provider capabilities, discover folders, search, and read mail without marking it read
 - Opt into flag changes, folder creation/rename, copying, moving, Trash, and saved drafts
@@ -23,7 +27,7 @@ Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One 
 - Self-host passkey OAuth on your own stable HTTPS domain, with client consent and Redis-backed token rotation/revocation
 - Read supported structured drafts, create append-only revisions, and prepare a reviewed draft for sending without changing the original
 
-Triage and conversation lookup are read-only: they fetch summaries and bounded selected headers, not message bodies, and do not mark mail read. Conversations use exact Message-ID/References/In-Reply-To links to a fixed anchor ID set, with no subject fallback or recursive expansion. Results do not claim mailbox-wide counts, urgency, or complete cross-folder threads. Read each exact reference for message content. Draft revision supports a strict structured MIME subset and appends a new draft while preserving the original. Unsupported or lossy MIME is rejected.
+IMAP triage and conversation lookup are read-only: they fetch summaries and bounded selected headers, not message bodies, and do not mark mail read. Conversations use exact Message-ID/References/In-Reply-To links to a fixed anchor ID set, with no subject fallback or recursive expansion. Results do not claim mailbox-wide counts, urgency, or complete cross-folder threads. Read each exact reference for message content. Draft revision supports a strict structured MIME subset and appends a new draft while preserving the original. Unsupported or lossy MIME is rejected.
 
 Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. Existing clients should follow the [tool migration guide](./docs/src/content/docs/tool-migration.md). See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
 
@@ -46,7 +50,7 @@ The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a se
 
 ## Safety boundaries
 
-The MCP host is trusted to obtain the owner's approval. Payload digests bind content; they do not prove a human approved it. Sending additionally requires a durable Redis REST store. SMTP acceptance is not delivery, and uncertain outcomes must not be retried automatically. Read [Safety and concurrency](./docs/src/content/docs/safety.md) before enabling writes or sends.
+The MCP host is trusted to obtain the owner's approval. Payload digests bind content; they do not prove a human approved it. Sending additionally requires a durable Redis REST store. Provider acceptance is not delivery, and uncertain outcomes must not be retried automatically. Read [Safety and concurrency](./docs/src/content/docs/safety.md) before enabling writes or sends.
 
 ## Documentation
 

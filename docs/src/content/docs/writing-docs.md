@@ -42,7 +42,7 @@ Choose the category by what the reader is trying to do:
 
 - **Get started:** understand Angelos and connect a client to an existing endpoint.
 - **Use your inbox:** complete a mailbox task, with ordinary-language examples and important limits at the point of use.
-- **Run Angelos:** provision, authenticate, and deploy the server as its operator.
+- Keep initial provisioning, authentication, and deployment in the single **Connect Your Assistant** guide. Describe what the agent executes and reserve owner handoffs for approvals, secrets, consent, and passkeys. Do not add competing setup guides.
 - **Reference:** look up exact schemas, environment variables, permission boundaries, implementation details, or migration behavior.
 - **Contributing:** change and verify the project.
 
@@ -53,3 +53,15 @@ The page layout renders the frontmatter title as its H1. Start Markdown body sec
 ## Keep docs tied to behavior
 
 When a code change introduces a new public workflow, interface, permission rule, or operational guarantee, update the relevant documentation in the same change whenever practical. Avoid documenting behavior that is only planned.
+
+## Publish an updater-compatible release
+
+The personal updater follows published stable releases, not raw `main`. Shipping its workflow does not publish a release or prove another owner's deployment works.
+
+1. Bump `internal/app`'s application version, the tool-reference version, and the docs release footer coherently.
+2. Review `.github/angelos-release.json`. Keep `format: 1`; set `automatic: true` only when this transition requires no owner action. Increment `config_epoch` or `state_epoch` for any required configuration or state migration, set `automatic: false`, and write explicit migration notes. The updater checks intervening manifests too, so do not mark an incompatible intermediate change safe simply because a later manifest restores an old number.
+3. Run all required tests and wait for the upstream `ci.yml` workflow to succeed on the exact final `main` commit. Fixes need a new complete check on their own commit.
+4. Publish a non-draft, non-prerelease GitHub release with a strict `vMAJOR.MINOR.PATCH` tag pointing at that tested commit. The tag version must equal the application's version. Do not move an existing release tag.
+5. Distinguish publication, fixture-test success, an owner's check-only run, and an actual successful production apply. Workflow-file changes require reviewed manual sync in personal forks before unattended updates can resume.
+
+The updater trusts the pinned upstream repository and verifies the tag's resolved commit and successful CI; it does not claim cryptographic release signing. No stable release is implied by this documentation. See [Keep Angelos updated](/docs/keep-updated) for owner setup and failure handling.

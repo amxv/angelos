@@ -30,6 +30,9 @@ type Backend struct {
 }
 
 func New(c config.Config) (*Backend, error) {
+	if c.IsMicrosoft() {
+		return nil, errors.New("Microsoft requires the Graph backend")
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}

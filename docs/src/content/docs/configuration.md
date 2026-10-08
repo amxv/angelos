@@ -1,7 +1,7 @@
 ---
 title: Configuration reference
 description: Configure one mailbox, TLS endpoints, OAuth access, and optional write features.
-summary: Environment variables for Spacemail, Gmail/Workspace, and generic mail servers.
+summary: Environment variables for Spacemail, Gmail/Workspace, iCloud, Yahoo, Microsoft Graph, and generic mail servers.
 order: 41
 category: Reference
 ---
@@ -16,10 +16,10 @@ The process reads environment variables. A `.env` file is not loaded automatical
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `MAIL_PROVIDER` | `spacemail` | `spacemail`, `gmail` (including Workspace), or `custom` |
-| `MAIL_AUTH_MODE` | `password`, or `google_oauth2` for Gmail | Gmail accepts `google_oauth2` or explicit eligible `app_password`; other providers use `password` |
+| `MAIL_PROVIDER` | `spacemail` | `spacemail`, `gmail` (including Workspace), `icloud`, `yahoo`, `microsoft`, or `custom` |
+| `MAIL_AUTH_MODE` | `password`; Gmail: `google_oauth2`; iCloud/Yahoo: `app_password`; Microsoft: `microsoft_graph` | Gmail accepts `google_oauth2` or eligible `app_password`; iCloud/Yahoo require `app_password`; Spacemail/custom use `password`; Microsoft uses `microsoft_graph` |
 | `MAIL_USERNAME` | Required | Mailbox login, normally the full email address |
-| `MAIL_PASSWORD` | Required for password modes | Spacemail/custom mailbox password, or eligible Google app password in its explicit mode; unset for Google OAuth |
+| `MAIL_PASSWORD` | Required for password modes | Spacemail/custom mailbox password, or a provider-issued app password in `app_password` mode; unset for Google/Microsoft OAuth |
 | `MAIL_FROM` | `MAIL_USERNAME` | Bare sender address accepted by the provider |
 | `GOOGLE_CLIENT_ID` | Required for Google OAuth | Matching owner-provisioned Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Required for Google OAuth | Client secret, excluded from JSON/output |
@@ -28,7 +28,7 @@ The process reads environment variables. A `.env` file is not loaded automatical
 | `IMAP_HOST` | Provider preset | IMAP DNS hostname |
 | `IMAP_PORT` | `993` | Implicit-TLS IMAP port |
 | `SMTP_HOST` | Provider preset | SMTP DNS hostname |
-| `SMTP_PORT` | `465` | SMTP submission port |
+| `SMTP_PORT` | `465`; iCloud: `587` | SMTP submission port |
 | `SMTP_TLS_MODE` | `tls`, or `starttls` for port 587 | Required TLS mode |
 | `MAIL_TIMEOUT` | `30s` | Per-operation timeout, between `1s` and `2m` |
 | `PORT` | `8080` | HTTP listening port; Vercel supplies this value |
@@ -45,11 +45,43 @@ These are the settings published in [Spacemail's official client setup guide](ht
 
 Use `MAIL_PROVIDER=gmail` and server-side Google OAuth credentials. The preset pins official Gmail hosts and defaults to XOAUTH2 refresh-token authentication. An explicit app-password alternative is conditional on account/admin eligibility. Read [Gmail and Google Workspace](/docs/gmail-workspace) before setup, including the personal/internal scope, full-mail grant, Sent-copy behavior and permanent-delete restriction.
 
+### iCloud and Yahoo
+
+Both presets require `MAIL_AUTH_MODE=app_password` (their default), the full bare mailbox address in `MAIL_USERNAME`, and an owner-created app password in `MAIL_PASSWORD`. Clear all `GOOGLE_*` credentials. These modes reuse the existing password-authenticated IMAP/SMTP backend and the same six MCP tools; they do not implement Apple or Yahoo OAuth.
+
+| Provider | IMAP (implicit TLS) | SMTP | Authentication |
+| --- | --- | --- | --- |
+| `icloud` | `imap.mail.me.com:993` | `smtp.mail.me.com:587` with STARTTLS | Apple app-specific password |
+| `yahoo` | `imap.mail.yahoo.com:993` | `smtp.mail.yahoo.com:465` with implicit TLS; alternatively port `587` with STARTTLS | Yahoo app password |
+
+Endpoints are pinned: host overrides and undocumented port/TLS combinations fail startup validation. Yahoo's documented port 587 alternative can be selected with `SMTP_PORT=587` and `SMTP_TLS_MODE=starttls`. Remove stale endpoint overrides when changing providers. Spacemail/custom override behavior and Gmail pinning are unchanged.
+
+For iCloud, [Apple's server settings](https://support.apple.com/en-us/102525) require a full email address for SMTP; using the full address for both protocols satisfies the shared username configuration. [Apple app-specific passwords](https://support.apple.com/en-us/102654) require two-factor authentication. The owner creates the password in their Apple Account and enters it directly into the deployment's private secret settings. Do not paste passwords into agent chat.
+
+For Yahoo, use the [official IMAP/SMTP settings](https://help.yahoo.com/kb/sln4075.html) and [app-password instructions](https://my.help.yahoo.com/kb/mail/generate-app-specific-password-sln15241.html). The owner must generate and privately enter the password. Yahoo can restrict app-password generation based on account eligibility; the preset cannot bypass that restriction.
+
+Special-use folders and IMAP capabilities are discovered from the server. Angelos does not hardcode an iCloud/Yahoo Sent folder or assert that their SMTP service automatically files Sent copies. For these presets, `smtp_stores_sent: false` means no automatic-filing guarantee is configured, not proof the provider never files a copy. Start with `append_sent=false`, verify the actual account's behavior after an explicitly approved test send, and request explicit filing only when needed. Deterministic local TLS fixtures cover configuration and protocol behavior; real iCloud/Yahoo account login and Sent-copy behavior have not been verified.
+
 ### Other providers
 
 Use `MAIL_PROVIDER=custom`, then set `IMAP_HOST` and `SMTP_HOST` to the provider's documented endpoints. For STARTTLS submission, set `SMTP_PORT=587` and `SMTP_TLS_MODE=starttls`.
 
-Spacemail and custom providers use the existing username/password flow. Gmail has a dedicated server-side Google OAuth flow. Other providers requiring OAuth need their own implementation; arbitrary token endpoints are not supported. OAuth on the MCP endpoint authenticates the agent client and remains separate from mailbox authentication.
+Spacemail and custom providers use the existing username/password flow. Gmail has a dedicated server-side Google OAuth flow; Microsoft uses its dedicated Graph adapter. Other providers requiring OAuth need their own implementation; arbitrary token endpoints are not supported. OAuth on the MCP endpoint authenticates the agent client and remains separate from mailbox authentication.
+
+### Microsoft Graph
+
+`MAIL_PROVIDER=microsoft` selects the delegated Graph adapter and defaults to `MAIL_AUTH_MODE=microsoft_graph`. Remove `MAIL_PASSWORD` and Google credentials. IMAP/SMTP endpoint overrides are not used for this connection. The primary mailbox address in `MAIL_USERNAME` and `MAIL_FROM` must match Graph `/me.mail`; aliases and shared mailboxes are unsupported.
+
+| Variable | Meaning |
+| --- | --- |
+| `MICROSOFT_CLIENT_ID` | UUID of the owner-provisioned confidential application |
+| `MICROSOFT_CLIENT_SECRET` | Private client secret; never expose in logs or JSON |
+| `MICROSOFT_REFRESH_TOKEN` | Delegated owner refresh grant |
+| `MICROSOFT_TENANT_ID` | Exact organization tenant UUID, or `consumers` for personal Outlook.com |
+| `MICROSOFT_ACCOUNT_ID` | Exact verified Graph `/me.id`, bound to returned message references |
+| `MICROSOFT_TOKEN_ENCRYPTION_KEY` | Stable 32-byte random AES-GCM key encoded as 64 hex characters; keep outside Redis |
+
+All six settings and the configured Redis REST store are required, including for read-only Microsoft access with an external MCP issuer. Rotated refresh tokens are encrypted in Redis; preserve the encryption key across redeployments and reauthorization. Global-cloud endpoints are pinned to `login.microsoftonline.com` and `graph.microsoft.com`. This does not authorize tenant administration or bypass consent policy. See the [Microsoft reference](/docs/microsoft) for grant setup, scope breadth, and different message/paging semantics.
 
 ## Reply identities
 
@@ -91,7 +123,7 @@ A valid configured store remains available for owner-scoped receipt reads when `
 
 ## Startup status
 
-`GET /healthz` reports the service version and whether required local configuration validated. It does not test the provider login, fetch OAuth signing keys, or prove Redis is reachable. Incomplete mail or OAuth configuration leaves `/mcp` unavailable with `503`. In external-issuer mode, incomplete store configuration leaves sending disabled while valid mailbox reads can still run. First-party mode also requires valid Redis and signing configuration; a runtime Redis failure denies token issuance and authenticated MCP calls. `configured: true` is not a Redis availability check.
+`GET /healthz` reports the service version and whether required local configuration validated. When mailbox configuration validates, `mail_provider` and `mail_auth_mode` report its non-secret preset/mode labels, even if MCP access configuration is still incomplete; invalid mailbox configuration omits those fields. It does not test the provider login, fetch OAuth signing keys, or prove Redis is reachable. Incomplete mail or OAuth configuration leaves `/mcp` unavailable with `503`. In external-issuer mode, incomplete store configuration leaves sending disabled while valid mailbox reads can still run. First-party mode also requires valid Redis and signing configuration; a runtime Redis failure denies token issuance and authenticated MCP calls. `configured: true` is not a Redis availability check.
 
 ## Secrets and deployment environments
 

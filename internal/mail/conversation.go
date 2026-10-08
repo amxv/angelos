@@ -222,7 +222,7 @@ func decodeConversationCursor(raw string, ref Reference, order string) (conversa
 func (b *Backend) Conversation(ctx context.Context, ref Reference, req SearchRequest) (SearchResult, error) {
 	out := SearchResult{Messages: []Summary{}}
 	// Whitelist fields before any network activity, including future filters.
-	if req != (SearchRequest{Folder: req.Folder, Order: req.Order, Cursor: req.Cursor, Limit: req.Limit}) || !validFolder(ref.Folder) || ref.UID == 0 || ref.UIDValidity == 0 || req.Folder != "" && req.Folder != ref.Folder {
+	if req != (SearchRequest{Folder: req.Folder, Order: req.Order, Cursor: req.Cursor, Limit: req.Limit}) || !validWriteReference(ref) || req.Folder != "" && req.Folder != ref.Folder {
 		return out, ErrInvalidInput
 	}
 	if req.Limit == 0 {

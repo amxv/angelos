@@ -1,0 +1,190 @@
+name: Personal instance updater
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Deploy the tested release and fast-forward this personal fork
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: personal-instance-update
+  cancel-in-progress: false
+env:
+  ANGELOS_AUTO_UPDATE: ${{ vars.ANGELOS_AUTO_UPDATE }}
+  ANGELOS_PRODUCTION_URL: ${{ vars.ANGELOS_PRODUCTION_URL }}
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+jobs:
+  plan:
+    if: github.repository != 'amxv/angelos' && github.event.repository.fork && (github.event_name == 'workflow_dispatch' || vars.ANGELOS_AUTO_UPDATE == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+      base: ${{ steps.plan.outputs.base }}
+      target: ${{ steps.plan.outputs.target }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check trusted upstream release (read-only)
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANGELOS_UPSTREAM_TOKEN: ${{ secrets.ANGELOS_UPSTREAM_TOKEN }}
+        run: |
+          cp scripts/upstream-askpass.sh "$RUNNER_TEMP/angelos-askpass"
+          chmod 700 "$RUNNER_TEMP/angelos-askpass"
+          export GIT_ASKPASS="$RUNNER_TEMP/angelos-askpass" GIT_TERMINAL_PROMPT=0
+          python3 scripts/personal_update.py plan
+      - name: Verify existing Vercel project (read-only)
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: python3 scripts/personal_update.py project
+  validate:
+    needs: plan
+    if: needs.plan.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+    env:
+      ANGELOS_TEST_REDIS_ADDR: 127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: amxv/angelos
+          ref: ${{ needs.plan.outputs.target }}
+          token: ${{ secrets.ANGELOS_UPSTREAM_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+      # Candidate code executes on a disposable runner with no deploy/write secrets.
+      # GITHUB_TOKEN ref updates do not trigger ordinary push CI: validate HERE.
+      - name: Validate exact release before any production change
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          test -z "$(gofmt -l .)"
+          go test -race -cover ./...
+          go vet ./...
+          go build ./...
+          cd docs
+          bun install --frozen-lockfile
+          bun run check
+          bun run build
+  deploy:
+    needs: [plan, validate]
+    if: needs.plan.outputs.changed == 'true' && (github.event_name == 'schedule' || inputs.apply)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Recheck release and fork on a fresh privileged runner
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANGELOS_UPSTREAM_TOKEN: ${{ secrets.ANGELOS_UPSTREAM_TOKEN }}
+          VALIDATED_BASE: ${{ needs.plan.outputs.base }}
+          VALIDATED_TARGET: ${{ needs.plan.outputs.target }}
+        run: |
+          cp scripts/personal_update.py "$RUNNER_TEMP/personal_update.py"
+          cp scripts/upstream-askpass.sh "$RUNNER_TEMP/angelos-askpass"
+          chmod 700 "$RUNNER_TEMP/angelos-askpass"
+          export GIT_ASKPASS="$RUNNER_TEMP/angelos-askpass" GIT_TERMINAL_PROMPT=0
+          python3 "$RUNNER_TEMP/personal_update.py" plan
+          test "$(git rev-parse HEAD)" = "$VALIDATED_BASE"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$VALIDATED_TARGET"
+      - name: Verify project and current production before applying
+        id: production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          EXPECTED_COMMIT: ${{ needs.plan.outputs.target }}
+          EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          python3 "$RUNNER_TEMP/personal_update.py" project
+          python3 "$RUNNER_TEMP/personal_update.py" production --target "$EXPECTED_COMMIT" --version "$EXPECTED_VERSION"
+      - name: Check out the exact validated source (no candidate scripts executed here)
+        if: steps.production.outputs.current != 'true'
+        env:
+          TARGET_SHA: ${{ needs.plan.outputs.target }}
+        run: git checkout --detach "$TARGET_SHA"
+      - name: Stage production build without assigning domains
+        if: steps.production.outputs.current != 'true'
+        id: deploy
+        env:
+          EXPECTED_COMMIT: ${{ needs.plan.outputs.target }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npm install --global vercel@62.4.0
+          url=$(vercel deploy --prod --skip-domain --yes --meta "angelosCommit=$EXPECTED_COMMIT" --token="$VERCEL_TOKEN")
+          case "$url" in https://*.vercel.app) ;; *) echo 'Unexpected deployment URL'; exit 1 ;; esac
+          vercel inspect "$url" --wait --timeout=10m --token="$VERCEL_TOKEN"
+          python3 "$RUNNER_TEMP/personal_update.py" deployment --url "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Promote ready deployment
+        if: steps.deploy.outputs.url != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: vercel promote "$DEPLOYMENT_URL" --yes --token="$VERCEL_TOKEN"
+      - name: Verify canonical deployment identity after promotion or retry
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          TARGET_SHA: ${{ needs.plan.outputs.target }}
+          EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          python3 "$RUNNER_TEMP/personal_update.py" health --version "$EXPECTED_VERSION"
+          python3 "$RUNNER_TEMP/personal_update.py" production --target "$TARGET_SHA" --version "$EXPECTED_VERSION" --require-current
+      - name: Fast-forward personal fork after verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ needs.plan.outputs.base }}
+          TARGET_SHA: ${{ needs.plan.outputs.target }}
+          EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          python3 "$RUNNER_TEMP/personal_update.py" finish --base "$BASE_SHA" --target "$TARGET_SHA"
+  report:
+    if: always() && needs.plan.result != 'skipped'
+    needs: [plan, validate, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report outcome
+        env:
+          PLAN: ${{ needs.plan.result }}
+          VALIDATE: ${{ needs.validate.result }}
+          DEPLOY: ${{ needs.deploy.result }}
+          CHANGED: ${{ needs.plan.outputs.changed }}
+          RELEASE: ${{ needs.plan.outputs.tag }}
+        run: |
+          {
+            echo '## Personal instance update'
+            echo "Plan: $PLAN; validation: $VALIDATE; deployment: $DEPLOY"
+            echo "Release: ${RELEASE:-not resolved}"
+            echo "Code change available: ${CHANGED:-not resolved}"
+            echo 'A successful check-only or unchanged run does not deploy. Failed apply may already have promoted: inspect Vercel before retrying. No automatic rollback, settings changes, or data deletion.'
+          } >> "$GITHUB_STEP_SUMMARY"

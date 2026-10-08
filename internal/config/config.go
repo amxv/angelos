@@ -19,24 +19,31 @@ type Endpoint struct {
 	TLSMode string
 }
 type Config struct {
-	Provider           string
-	AuthMode           string
-	GoogleClientID     string `json:"-"`
-	GoogleClientSecret string `json:"-"`
-	GoogleRefreshToken string `json:"-"`
-	Username           string `json:"-"`
-	Password           string `json:"-"`
-	From               string
-	Aliases            []string `json:"-"`
-	IMAP               Endpoint
-	SMTP               Endpoint
-	Timeout            time.Duration
+	Provider                    string
+	MicrosoftClientID           string `json:"-"`
+	MicrosoftClientSecret       string `json:"-"`
+	MicrosoftRefreshToken       string `json:"-"`
+	MicrosoftTenantID           string `json:"-"`
+	MicrosoftAccountID          string `json:"-"`
+	MicrosoftTokenEncryptionKey string `json:"-"`
+	AuthMode                    string
+	GoogleClientID              string `json:"-"`
+	GoogleClientSecret          string `json:"-"`
+	GoogleRefreshToken          string `json:"-"`
+	Username                    string `json:"-"`
+	Password                    string `json:"-"`
+	From                        string
+	Aliases                     []string `json:"-"`
+	IMAP                        Endpoint
+	SMTP                        Endpoint
+	Timeout                     time.Duration
 }
 
 func LoadFromEnv() (Config, error) { return Load(os.Getenv) }
 func Load(getenv func(string) string) (Config, error) {
 	c := Config{
 		Provider: getenv("MAIL_PROVIDER"), AuthMode: getenv("MAIL_AUTH_MODE"),
+		MicrosoftClientID: getenv("MICROSOFT_CLIENT_ID"), MicrosoftClientSecret: getenv("MICROSOFT_CLIENT_SECRET"), MicrosoftRefreshToken: getenv("MICROSOFT_REFRESH_TOKEN"), MicrosoftTenantID: getenv("MICROSOFT_TENANT_ID"), MicrosoftAccountID: getenv("MICROSOFT_ACCOUNT_ID"), MicrosoftTokenEncryptionKey: getenv("MICROSOFT_TOKEN_ENCRYPTION_KEY"),
 		GoogleClientID: getenv("GOOGLE_CLIENT_ID"), GoogleClientSecret: getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRefreshToken: getenv("GOOGLE_REFRESH_TOKEN"),
 		Username:           getenv("MAIL_USERNAME"), Password: getenv("MAIL_PASSWORD"),
@@ -55,8 +62,12 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if c.AuthMode == "" {
 		c.AuthMode = "password"
-		if c.IsGmail() {
+		if c.IsMicrosoft() {
+			c.AuthMode = "microsoft_graph"
+		} else if c.IsGmail() {
 			c.AuthMode = "google_oauth2"
+		} else if c.isAppPasswordProvider() {
+			c.AuthMode = "app_password"
 		}
 	}
 	if c.Provider == "spacemail" {
@@ -65,8 +76,16 @@ func Load(getenv func(string) string) (Config, error) {
 	} else if c.IsGmail() {
 		c.IMAP = Endpoint{"imap.gmail.com", 993, "tls"}
 		c.SMTP = Endpoint{"smtp.gmail.com", 465, "tls"}
+	} else if c.Provider == "icloud" {
+		c.IMAP = Endpoint{"imap.mail.me.com", 993, "tls"}
+		c.SMTP = Endpoint{"smtp.mail.me.com", 587, "starttls"}
+	} else if c.Provider == "yahoo" {
+		c.IMAP = Endpoint{"imap.mail.yahoo.com", 993, "tls"}
+		c.SMTP = Endpoint{"smtp.mail.yahoo.com", 465, "tls"}
+	} else if c.IsMicrosoft() {
+		// Graph uses only fixed HTTPS endpoints; IMAP/SMTP are unused.
 	} else if c.Provider != "custom" {
-		return c, errors.New("MAIL_PROVIDER must be spacemail, gmail or custom")
+		return c, errors.New("MAIL_PROVIDER must be spacemail, gmail, microsoft, icloud, yahoo or custom")
 	}
 	if v := getenv("IMAP_HOST"); v != "" {
 		c.IMAP.Host = v
@@ -116,7 +135,13 @@ func Load(getenv func(string) string) (Config, error) {
 	return c, c.Validate()
 }
 func (c Config) Validate() error {
-	if c.Provider != "" && c.Provider != "spacemail" && c.Provider != "custom" && !c.IsGmail() {
+	if c.IsMicrosoft() {
+		return c.validateMicrosoft()
+	}
+	if c.MicrosoftClientID != "" || c.MicrosoftClientSecret != "" || c.MicrosoftRefreshToken != "" || c.MicrosoftTenantID != "" || c.MicrosoftAccountID != "" || c.MicrosoftTokenEncryptionKey != "" {
+		return errors.New("Microsoft credentials require the microsoft provider")
+	}
+	if c.Provider != "" && c.Provider != "spacemail" && c.Provider != "custom" && !c.IsGmail() && !c.isAppPasswordProvider() {
 		return errors.New("invalid MAIL_PROVIDER")
 	}
 	if c.Username == "" {
@@ -132,6 +157,21 @@ func (c Config) Validate() error {
 		}
 		if !c.UsesGoogleOAuth2() && c.AuthMode != "app_password" {
 			return errors.New("Gmail MAIL_AUTH_MODE must be google_oauth2 or app_password")
+		}
+	} else if c.isAppPasswordProvider() {
+		if !bareAddress(c.Username) {
+			return errors.New("iCloud and Yahoo MAIL_USERNAME must be a complete bare email address")
+		}
+		if c.AuthMode != "app_password" {
+			return errors.New("iCloud and Yahoo MAIL_AUTH_MODE must be app_password")
+		}
+		if c.Provider == "icloud" {
+			if c.IMAP != (Endpoint{"imap.mail.me.com", 993, "tls"}) || c.SMTP != (Endpoint{"smtp.mail.me.com", 587, "starttls"}) {
+				return errors.New("iCloud requires its pinned IMAP and SMTP TLS endpoints")
+			}
+		} else if c.IMAP != (Endpoint{"imap.mail.yahoo.com", 993, "tls"}) ||
+			(c.SMTP != (Endpoint{"smtp.mail.yahoo.com", 465, "tls"}) && c.SMTP != (Endpoint{"smtp.mail.yahoo.com", 587, "starttls"})) {
+			return errors.New("Yahoo requires its pinned IMAP and SMTP TLS endpoints")
 		}
 	} else if c.AuthMode != "" && c.AuthMode != "password" {
 		return errors.New("MAIL_AUTH_MODE requires a compatible provider")
@@ -246,5 +286,8 @@ func (c Config) IsGmailIMAP() bool {
 // SMTPStoresSent identifies Google's automatic Sent storage independently from
 // the configured IMAP service, including known custom Google SMTP endpoints.
 func (c Config) SMTPStoresSent() bool {
-	return c.IsGmail() || strings.EqualFold(c.SMTP.Host, "smtp.gmail.com") || strings.EqualFold(c.SMTP.Host, "smtp.googlemail.com")
+	return c.IsMicrosoft() || c.IsGmail() || strings.EqualFold(c.SMTP.Host, "smtp.gmail.com") || strings.EqualFold(c.SMTP.Host, "smtp.googlemail.com")
 }
+
+// isAppPasswordProvider identifies presets requiring an owner-created app password.
+func (c Config) isAppPasswordProvider() bool { return c.Provider == "icloud" || c.Provider == "yahoo" }

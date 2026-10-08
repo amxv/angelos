@@ -29,7 +29,7 @@ func validSourceDigest(value string) bool {
 }
 
 func (a *App) readDraft(ctx context.Context, ref mail.Reference, digest string) (mail.Draft, error) {
-	if ref.UID == 0 || ref.UIDValidity == 0 || len(ref.Folder) == 0 || len(ref.Folder) > 1024 || !utf8.ValidString(ref.Folder) || strings.IndexFunc(ref.Folder, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) >= 0 {
+	if !mail.ValidGraphReference(ref) && (ref.UID == 0 || ref.UIDValidity == 0 || len(ref.Folder) == 0 || len(ref.Folder) > 1024 || !utf8.ValidString(ref.Folder) || strings.IndexFunc(ref.Folder, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) >= 0) {
 		return mail.Draft{}, mail.ErrInvalidInput
 	}
 	if digest != "" && !validSourceDigest(digest) {

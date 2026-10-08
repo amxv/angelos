@@ -143,7 +143,7 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 	if p := schema.Properties["search"]; p != nil {
 		p.Required = nil
 		p.Properties["order"].Enum = []any{"", "newest", "oldest"}
-		p.Properties["order"].Description = "UID arrival order; newest is default"
+		p.Properties["order"].Description = "IMAP UID / Graph received-date order; newest default"
 		p.Properties["message_id"].Description = "Exact case-sensitive Message-ID"
 		p.Properties["attention"].Description = "Unread OR flagged; AND other filters"
 		p.Description = "AND filters: folder=INBOX, limit=25 (1-100), query=literal text (not Gmail syntax), since/before=YYYY-MM-DD inclusive/exclusive arrival. cursor=next_cursor; same filters/order, even empty pages. conversation: only folder/order/cursor/limit"
@@ -283,10 +283,13 @@ func validateAction(name string, raw json.RawMessage) error {
 }
 
 func (a *App) registerTools(s *mcp.Server) {
-	grouped(s, a, tool("mail_query", "Read without marking read. Summary ref = row.reference or page folder/uid_validity + row uid. Triage: unread OR flagged, page counts. Conversation: same-folder ID links. Draft: complete Bcc/HTML/files + source_digest or unsupported-MIME error. Check each batch item.status. send_status needs send scope/store, not enablement; expires_at = prepare deadline. Gmail labels overlap; All is not Archive.", true, false, false), "mail.read", a.query)
+	grouped(s, a, tool("mail_query", "Read without marking read. Summary ref = row.reference or page folder/uid_validity + row uid. Triage: unread OR flagged, page counts. Conversation: IMAP same-folder ID links; unsupported on Graph. Draft: complete Bcc/HTML/files + source_digest or unsupported-MIME error. Check each batch item.status. send_status needs send scope/store, not enablement; expires_at = prepare deadline. Gmail labels overlap; All is not Archive.", true, false, false), "mail.read", a.query)
 	grouped(s, a, tool("mail_create", "Create folder, copy or save draft; never sends. Draft defaults to discovered Drafts; Bcc preserved. Revision: source folder default, original retained. Read revision via mail_query draft before preparing. Strict MIME subset; rebuilt bytes. Verify uncertain outcomes before retrying.", false, false, false), "mail.write", a.create)
-	grouped(s, a, tool("mail_modify", "Change flags, rename folder, move or trash. Rename affects other clients. Move needs UID MOVE; Trash needs unique SPECIAL-USE. Use discovered names and new destination refs; verify uncertainty before retrying.", false, true, false), "mail.write", a.modify)
-	register(s, a, tool("mail_delete_permanently", "Irreversible exact UID EXPUNGE, never global. Needs per-action user confirmation and delete gate. Unavailable for Gmail/Workspace.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
+	grouped(s, a, tool("mail_modify", "Change flags, rename folder, move or trash. Rename affects other clients. Check capabilities; Graph supports Seen/Flagged only. Use discovered names and new destination refs; verify uncertainty before retrying.", false, true, false), "mail.write", a.modify)
+	register(s, a, tool("mail_delete_permanently", "Irreversible exact UID EXPUNGE, never global. Needs per-action user confirmation and delete gate. Unavailable for Gmail/Workspace and Graph.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
+		if a.Config.IsMicrosoft() {
+			return nil, mail.ErrUnsupported
+		}
 		if a.Config.IsGmailIMAP() {
 			return nil, mail.ErrGmailDelete
 		}
@@ -296,7 +299,7 @@ func (a *App) registerTools(s *mcp.Server) {
 		return a.Mail.Delete(ctx, in)
 	})
 	grouped(s, a, tool("mail_prepare", "Prepare 15-minute preview, never sends; needs enabled sending/store. new/forward need recipients. Replies derive omitted To, reply_all also Cc; never Bcc. Lists replace; [] clears. Draft retains original. Review full text/HTML, recipients/Bcc, warnings/hashes before mail_send_confirmed.", false, false, false), "mail.send", a.prepare)
-	register(s, a, tool("mail_send_confirmed", "Send approved preview once. accepted is SMTP acceptance, not delivery. Query send_status after uncertainty; never resend/duplicate sending/unknown. Confirmation trusts client, not proof of human click.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
+	register(s, a, tool("mail_send_confirmed", "Send approved preview once. accepted is provider acceptance, not delivery. Query send_status after uncertainty; never resend/duplicate sending/unknown. Confirmation trusts client, not proof of human click.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
 		if e := a.authorizeSent(ctx, in); e != nil {
 			return nil, e
 		}

@@ -8,7 +8,7 @@ category: Get started
 
 Angelos connects an AI assistant to your existing email account. Ask it to find a receipt, catch you up on an exchange, organize messages, or prepare a reply for review. You can keep using Apple Mail or another mail app alongside it.
 
-It is a self-hosted connection between an assistant and one mailbox. There is no Angelos-hosted signup or new email account to create. You or someone you trust runs the service and decides which capabilities to enable.
+It is a self-hosted connection between an assistant and one mailbox. There is no Angelos-hosted signup or new email account to create. Your agent can set up the service in your own accounts; you approve access, enter secrets securely, and complete passkey enrollment. Each person runs a separate instance and decides which capabilities to enable.
 
 ## Start with something useful
 
@@ -33,7 +33,7 @@ Read access is the default. Mailbox changes, sending, and permanent deletion hav
 
 ## Choose a mailbox
 
-Spacemail is the default provider. Gmail and Google Workspace are also supported through Google credentials provisioned by the mailbox owner on the server. Other compatible IMAP/SMTP providers can use password authentication. Gmail setup is not an interactive Angelos account-linking flow.
+Spacemail is the default provider. iCloud and Yahoo use provider app passwords. Gmail and Google Workspace use eligible app passwords or Google OAuth credentials provisioned by the mailbox owner on the server. Microsoft Outlook.com and eligible Microsoft 365 accounts use delegated Microsoft Graph access. Other compatible IMAP/SMTP providers can use password authentication. Gmail setup is not an interactive Angelos account-linking flow.
 
 ## Know the boundaries
 
@@ -44,6 +44,7 @@ It also does not manage mail accounts, provider filtering rules, or desktop-only
 ## Choose your next step
 
 - **I’m getting started:** follow [Connect Your Assistant](/docs/quickstart), from deployment to your first ChatGPT request.
+- **I want updates handled for me:** use [Keep Angelos updated](/docs/keep-updated) after your first connection works.
 - **I want everyday examples:** open [Work with your inbox](/docs/inbox-guide) or [Write and send mail](/docs/sending-guide).
 - **I am building an agent:** use the [Agent playbook](/docs/agent-guide), then the [tool reference](/docs/tools).
 

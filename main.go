@@ -74,7 +74,22 @@ func newHandler() http.Handler {
 			// RFC 9728 path-specific discovery for a resource ending in /mcp.
 			mux.Handle(auth.MetadataPath+"/mcp", gate.MetadataHandler())
 			if mailErr == nil {
-				backend, e := mail.New(mailConfig)
+				var backend app.Backend
+				var e error
+				if mailConfig.IsMicrosoft() {
+					var graph *mail.GraphBackend
+					graph, e = mail.NewGraph(mailConfig)
+					if e == nil {
+						var tokenTransport *dispatch.Redis
+						tokenTransport, e = dispatch.NewRedis(os.Getenv("ANGELOS_REDIS_REST_URL"), os.Getenv("ANGELOS_REDIS_REST_TOKEN"))
+						if e == nil {
+							e = graph.ConfigureTokenStore(tokenTransport)
+						}
+					}
+					backend = graph
+				} else {
+					backend, e = mail.New(mailConfig)
+				}
 				if e == nil {
 					a := &app.App{Mail: backend, Config: mailConfig, EnableWrites: enabled("MAIL_ENABLE_WRITES"), EnableSend: enabled("MAIL_ENABLE_SEND"), EnableDelete: enabled("MAIL_ENABLE_DELETE"), AuthChallenge: gate.Challenge}
 					configureStore(a)
@@ -102,7 +117,14 @@ func newHandler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		json.NewEncoder(w).Encode(map[string]any{"service": "angelos", "version": app.Version, "configured": configured})
+		status := map[string]any{"service": "angelos", "version": app.Version, "configured": configured}
+		// Only validated, non-secret configuration labels are public. This is
+		// not a live mailbox login or provider-availability check.
+		if mailErr == nil {
+			status["mail_provider"] = mailConfig.Provider
+			status["mail_auth_mode"] = mailConfig.AuthMode
+		}
+		json.NewEncoder(w).Encode(status)
 	})
 	var handler http.Handler = mux
 	if firstParty {

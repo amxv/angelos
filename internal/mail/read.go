@@ -703,7 +703,7 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 // readRaw keeps complete source bytes separate from the bounded display parser.
 func (b *Backend) readRaw(ctx context.Context, ref Reference) (Message, error) {
 	out := Message{Headers: map[string]string{}, Attachments: []Attachment{}}
-	if !validFolder(ref.Folder) || ref.UID == 0 || ref.UIDValidity == 0 {
+	if !validWriteReference(ref) {
 		return out, ErrInvalidInput
 	}
 	s, err := b.connectIMAP(ctx)

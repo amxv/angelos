@@ -76,7 +76,7 @@ Some drafts cannot be safely rebuilt, including inline-image, signed/encrypted, 
 
 **Accepted** means the outgoing mail server accepted the message. It does not verify delivery to the recipient.
 
-Gmail saves outgoing mail in Sent automatically; Angelos must not request an extra copy. Other providers may also save a copy. If a separate Sent-copy step fails after acceptance, the message may already be on its way. Do not resend just to repair filing.
+Gmail and Microsoft Graph save outgoing mail in Sent automatically; Angelos must not request an extra copy. Graph acceptance means queued, not delivered. Other providers may also save a copy. If a separate Sent-copy step fails after acceptance, the message may already be on its way. Do not resend just to repair filing.
 
 If the result is **sending**, **unknown**, or interrupted, ask:
 

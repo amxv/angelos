@@ -129,8 +129,10 @@ func TestToolSchemaTokenBudget(t *testing.T) {
 	// Preserve the old compression ceiling plus a fixed 768-byte lifecycle
 	// allowance; never change the original 17-tool baseline to fit growth.
 	const draftLifecycleAllowance = 768
-	if (len(withoutMirror)-draftLifecycleAllowance)*100 > len(baseline)*70 || len(current)-len(withoutMirror) > 512 {
-		t.Fatalf("discovery exceeds historic 70%% + 768-byte draft budget or 512-byte OAuth compatibility allowance: wire=%d structural=%d baseline=%d", len(current), len(withoutMirror), len(baseline))
+	// 0.10 adds bounded, account-bound opaque Graph reference fields and provider safety notes.
+	const graphReferenceAllowance = 512
+	if (len(withoutMirror)-draftLifecycleAllowance-graphReferenceAllowance)*100 > len(baseline)*70 || len(current)-len(withoutMirror) > 512 {
+		t.Fatalf("discovery exceeds historic 70%% + 768-byte draft + 512-byte Graph budget or 512-byte OAuth compatibility allowance: wire=%d structural=%d baseline=%d", len(current), len(withoutMirror), len(baseline))
 	}
 	countSchemas := func(raw []byte) (int, int) {
 		var ts []map[string]json.RawMessage
@@ -169,7 +171,7 @@ func TestToolSchemaReleaseSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "testdata/tools-list-v0.9.0.json"
+	path := "testdata/tools-list-v0.10.0.json"
 	if os.Getenv("UPDATE_TOOL_SNAPSHOT") == "1" {
 		if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
 			t.Fatal(err)
@@ -180,6 +182,6 @@ func TestToolSchemaReleaseSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(bytes.TrimSpace(want), data) {
-		t.Fatal("tool schema changed; review and intentionally update the 0.9.0 snapshot")
+		t.Fatal("tool schema changed; review and intentionally update the 0.10.0 snapshot")
 	}
 }
