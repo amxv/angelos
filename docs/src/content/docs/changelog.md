@@ -10,7 +10,9 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
-## 0.11.1 — Unreleased
+## 0.11.1 — Released 2026-10-08
+
+[Published release](https://github.com/amxv/angelos/releases/tag/v0.11.1) · [Source at v0.11.1](https://github.com/amxv/angelos/commit/a393e10ee24923c1af049b836555587fd99334e0)
 
 - Fixed new assistant connections losing their authorization request when a hosted client follows redirects before opening the owner's browser. Anonymous sign-in is now rendered at the validated authorization URL, preserving the client, exact callback, state, PKCE, resource, and requested scopes through the browser handoff. Owner passkey verification and explicit consent are still required.
 - Existing passkeys, sessions, grants, and client configuration remain compatible. Restart **Connect** in the assistant after updating if an earlier attempt opened a standalone sign-in page. See [OAuth authorization and recovery](/docs/oauth-reference).
