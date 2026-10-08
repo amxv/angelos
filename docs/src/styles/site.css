@@ -131,6 +131,8 @@ em { font-weight: inherit; }
 .path-label { font-family: var(--font-mono); font-size: .54rem; letter-spacing: .075em; color: var(--muted); }
 .start-paths h3 { font-size: 1.8rem; font-weight: 400; margin: 10px 0 10px; letter-spacing: -.02em; }.start-paths h3 span { float: right; font-family: var(--font-sans); font-size: 1.3rem; color: var(--signal); }
 .start-paths p { max-width: 430px; font-size: .77rem; line-height: 1.8; color: var(--muted); }
+.name-origin { margin: 0 auto; padding: 0 0 42px; color: var(--muted); font-size: .72rem; }
+.name-origin span { padding: 0 .3rem; }
 .colophon { border-top: 1px solid var(--line); padding-top: 42px; }
 .colophon__top { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; padding-bottom: 45px; }
 .colophon__brand { font-family: var(--font-heading); font-size: 3rem; letter-spacing: -.045em; line-height: 1; }.colophon__brand span { color: var(--signal); display: inline-block; margin-left: 17px; font-family: var(--font-sans); font-size: 1.8rem; transform: translateY(-4px); }
