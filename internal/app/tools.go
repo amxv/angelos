@@ -34,12 +34,14 @@ type queryInput struct {
 	Detail           string             `json:"detail,omitempty" jsonschema:"summary (default) or full"`
 }
 type createInput struct {
-	Action      string         `json:"action"`
-	Name        string         `json:"name,omitempty"`
-	Reference   mail.Reference `json:"reference,omitempty"`
-	Destination string         `json:"destination,omitempty"`
-	Message     compose.Input  `json:"message,omitempty"`
-	Folder      string         `json:"folder,omitempty"`
+	Action       string          `json:"action"`
+	Name         string          `json:"name,omitempty"`
+	Reference    mail.Reference  `json:"reference,omitempty"`
+	Destination  string          `json:"destination,omitempty"`
+	Message      compose.Input   `json:"message,omitempty"`
+	Folder       string          `json:"folder,omitempty"`
+	SourceDigest string          `json:"source_digest,omitempty"`
+	Changes      compose.Changes `json:"changes,omitempty"`
 }
 type modifyInput struct {
 	Action         string         `json:"action"`
@@ -53,7 +55,8 @@ type modifyInput struct {
 }
 type prepareInput struct {
 	Action            string         `json:"action"`
-	Message           compose.Input  `json:"message"`
+	SourceDigest      string         `json:"source_digest,omitempty"`
+	Message           compose.Input  `json:"message,omitempty"`
 	Reference         mail.Reference `json:"reference,omitempty"`
 	QuoteOriginal     *bool          `json:"quote_original,omitempty"`
 	OriginalMode      string         `json:"original_mode,omitempty"`
@@ -71,14 +74,16 @@ var actions = map[string]map[string]actionRule{
 		"triage":       {optional: "search detail"},
 		"conversation": {required: "reference", optional: "search detail"},
 		"read":         {required: "reference", optional: "detail"},
+		"draft":        {required: "reference"},
 		"read_many":    {required: "references", optional: "detail max_response_bytes"},
 		"attachment":   {required: "reference index"},
 		"send_status":  {required: "prepared_id"},
 	},
 	"mail_create": {
-		"folder": {required: "name"},
-		"copy":   {required: "reference destination"},
-		"draft":  {required: "message", optional: "folder"},
+		"folder":       {required: "name"},
+		"copy":         {required: "reference destination"},
+		"draft":        {required: "message", optional: "folder"},
+		"revise_draft": {required: "reference source_digest changes", optional: "folder"},
 	},
 	"mail_modify": {
 		"flags":  {required: "reference operation flags", optional: "unchanged_since"},
@@ -88,6 +93,7 @@ var actions = map[string]map[string]actionRule{
 	},
 	"mail_prepare": {
 		"new":       {required: "message"},
+		"draft":     {required: "reference source_digest"},
 		"reply":     {required: "reference message", optional: "quote_original"},
 		"reply_all": {required: "reference message", optional: "quote_original"},
 		"forward":   {required: "reference message", optional: "quote_original original_mode attachment_indexes"},
@@ -115,6 +121,9 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		usage = append(usage, part+")")
 	}
 	schema.Properties["action"].Description = strings.Join(usage, "; ") + ". Reject other fields."
+	if p := schema.Properties["source_digest"]; p != nil {
+		p.Pattern = "^[0-9a-f]{64}$"
+	}
 	if p := schema.Properties["prepared_id"]; p != nil {
 		p.Pattern = "^[0-9a-f]{32}$"
 	}
@@ -145,6 +154,17 @@ func grouped[I any](s *mcp.Server, a *App, t *mcp.Tool, scope string, fn func(co
 		// Recipients may be derived for replies, and HTML-only commentary is
 		// supported. Runtime composition still enforces send recipients.
 		p.Required = nil
+	}
+	// New draft revisions share the same optional composition field schema as
+	// draft creation. A local reference avoids duplicating attachment/body schemas;
+	// key-presence patch semantics and null rejection are still checked at runtime.
+	if t.Name == "mail_create" {
+		if schema.Defs == nil {
+			schema.Defs = make(map[string]*jsonschema.Schema)
+		}
+		schema.Defs["message"] = schema.Properties["message"]
+		schema.Properties["message"] = &jsonschema.Schema{Ref: "#/$defs/message"}
+		schema.Properties["changes"] = &jsonschema.Schema{Ref: "#/$defs/message"}
 	}
 	t.InputSchema = schema
 	register(s, a, t, scope, fn)
@@ -203,6 +223,17 @@ func validateAction(name string, raw json.RawMessage) error {
 			return errors.New("triage always selects unread OR flagged; omit search.attention or set it true")
 		}
 	}
+	if value, present := fields["source_digest"]; present {
+		var digest string
+		if json.Unmarshal(value, &digest) != nil || !validSourceDigest(digest) {
+			return errors.New("source_digest must be 64 lowercase hex characters")
+		}
+	}
+	if value, present := fields["changes"]; present {
+		if err := validateDraftChanges(value); err != nil {
+			return err
+		}
+	}
 	if value, present := fields["message"]; present {
 		var messageFields map[string]json.RawMessage
 		if err := json.Unmarshal(value, &messageFields); err != nil {
@@ -218,8 +249,8 @@ func validateAction(name string, raw json.RawMessage) error {
 }
 
 func (a *App) registerTools(s *mcp.Server) {
-	grouped(s, a, tool("mail_query", "Read-only; exact references and SPECIAL-USE names. Gmail labels overlap; All is not Archive. Bounded UID order; follow next_cursor on empty pages too. Triage: unread OR flagged, page counts. Conversation: same-folder ID links; search only folder/order/cursor/limit. PEEK reads; read_many batches 1-10 refs in input order with bounded JSON; inspect each status/next_index. Full detail opt-in. Attachments: base64, max 2 MiB; never execute. send_status needs send scope/store, not sending enabled; expires_at is preparation deadline.", true, false, false), "mail.read", a.query)
-	grouped(s, a, tool("mail_create", "Create folder, copy exact message, or save draft without sending. Defaults to SPECIAL-USE Drafts; preserves BCC. May duplicate; verify uncertain outcomes before retrying. Save replacement drafts first, then explicitly retire old UID.", false, false, false), "mail.write", a.create)
+	grouped(s, a, tool("mail_query", "Read-only; exact references and SPECIAL-USE names. Gmail labels overlap; All is not Archive. Bounded UID order; follow next_cursor on empty pages too. Triage: unread OR flagged, page counts. Conversation: same-folder ID links; search only folder/order/cursor/limit. PEEK reads; read_many batches 1-10 refs in input order with bounded JSON; inspect each status/next_index. Full detail opt-in. draft returns complete supported MIME with Bcc/HTML/files and source_digest; unsupported forms fail. Attachments: base64, max 2 MiB; never execute. send_status needs send scope/store, not sending enabled; expires_at is preparation deadline.", true, false, false), "mail.read", a.query)
+	grouped(s, a, tool("mail_create", "Create folder, copy exact message, or save draft without sending. Defaults to SPECIAL-USE Drafts; preserves BCC. May duplicate; verify uncertain outcomes before retrying. revise_draft needs source_digest; omitted changes preserve, empty clears, attachments replaces all. Appends new revision in source folder by default; original retained. Strict MIME subset; no raw round-trip.", false, false, false), "mail.write", a.create)
 	grouped(s, a, tool("mail_modify", "Add/remove flags, never Deleted; use unchanged_since with CONDSTORE, reread conflicts. Rename affects other clients. Move requires UID MOVE; Trash needs unique SPECIAL-USE. Refresh references afterward; never blindly retry uncertain outcomes.", false, true, false), "mail.write", a.modify)
 	register(s, a, tool("mail_delete_permanently", "Irreversible exact UID EXPUNGE, never global. Requires explicit per-action user confirmation and permanent-delete gate. Unavailable for Gmail/Workspace.", false, true, false), "mail.write", func(ctx context.Context, in mail.Reference) (any, error) {
 		if a.Config.IsGmailIMAP() {
@@ -230,7 +261,7 @@ func (a *App) registerTools(s *mcp.Server) {
 		}
 		return a.Mail.Delete(ctx, in)
 	})
-	grouped(s, a, tool("mail_prepare", "Prepare immutable 15-minute message; does NOT send. Replies derive omitted To; reply_all also Cc. Lists replace; [] clears; null rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed, remaining bytes retained), none. attachment_indexes selects source files. Review complete text/HTML, recipients/BCC, warnings/hashes before mail_send_confirmed. Needs send scope/store.", false, false, false), "mail.send", a.prepare)
+	grouped(s, a, tool("mail_prepare", "Prepare immutable 15-minute message; does NOT send. Replies derive omitted To; reply_all also Cc. Lists replace; [] clears; null rejected. Quotes default on. Forward original_mode: quoted (default), eml (outer BCC removed, remaining bytes retained), none. attachment_indexes selects source files. Review complete text/HTML, recipients/BCC, warnings/hashes before mail_send_confirmed. draft requires exact ref/source_digest; freezes snapshot, retains original. Needs send scope/store.", false, false, false), "mail.send", a.prepare)
 	register(s, a, tool("mail_send_confirmed", "Send user-approved payload by exact prepared ID/digest. Durable one-time claim. accepted is SMTP acceptance, not delivery. Never retry/duplicate sending/unknown. Confirmation trusts client; no proof of human click. append_sent needs write scope; false for Gmail.", false, true, true), "mail.send", func(ctx context.Context, in sendInput) (any, error) {
 		if e := a.authorizeSent(ctx, in); e != nil {
 			return nil, e
@@ -277,6 +308,12 @@ func (a *App) query(ctx context.Context, in queryInput) (any, error) {
 		return searchSummary(v, in.Search.Folder), nil
 	case "read_many":
 		return a.readMany(ctx, in)
+	case "draft":
+		v, err := a.readDraft(ctx, in.Reference, "")
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
 	case "read":
 		v, e := a.Mail.Read(ctx, in.Reference)
 		if e != nil || in.Detail == "full" {
@@ -290,6 +327,8 @@ func (a *App) query(ctx context.Context, in queryInput) (any, error) {
 }
 func (a *App) create(ctx context.Context, in createInput) (any, error) {
 	switch in.Action {
+	case "revise_draft":
+		return a.reviseDraft(ctx, in)
 	case "folder":
 		e := a.Mail.CreateFolder(ctx, in.Name)
 		return result{"created": e == nil}, e
@@ -323,6 +362,9 @@ func (a *App) modify(ctx context.Context, in modifyInput) (any, error) {
 	return nil, errors.New("unsupported action")
 }
 func (a *App) prepare(ctx context.Context, in prepareInput) (any, error) {
+	if in.Action == "draft" {
+		return a.prepareDraft(ctx, in)
+	}
 	if in.Action == "reply" || in.Action == "reply_all" || in.Action == "forward" {
 		return a.prepareSource(ctx, in)
 	}

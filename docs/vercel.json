@@ -9,5 +9,47 @@
       "main": true,
       "*": false
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/docs/self-hosting",
+      "destination": "/docs/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/self-hosting.md",
+      "destination": "/docs/quickstart.md",
+      "permanent": true
+    },
+    {
+      "source": "/docs/authentication",
+      "destination": "/docs/quickstart#4-add-secrets-and-deploy",
+      "permanent": true
+    },
+    {
+      "source": "/docs/authentication.md",
+      "destination": "/docs/quickstart.md",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment",
+      "destination": "/docs/quickstart#1-create-your-vercel-api-project",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment.md",
+      "destination": "/docs/quickstart.md",
+      "permanent": true
+    },
+    {
+      "source": "/docs/first-party-oauth",
+      "destination": "/docs/quickstart#4-add-secrets-and-deploy",
+      "permanent": true
+    },
+    {
+      "source": "/docs/first-party-oauth.md",
+      "destination": "/docs/quickstart.md",
+      "permanent": true
+    }
+  ]
 }

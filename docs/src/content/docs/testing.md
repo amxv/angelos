@@ -6,7 +6,7 @@ order: 90
 category: Contributing
 ---
 
-For first-run mailbox verification, follow [Self-host Angelos](/docs/self-hosting); this page covers contributor checks and synthetic regression tests.
+For first-run mailbox verification, follow [Connect Your Assistant](/docs/quickstart); this page covers contributor checks and synthetic regression tests.
 
 Use Go 1.27.1, the toolchain requested by `go.mod` and used in CI. The module declares a Go 1.26.0 language version. For documentation checks, use Bun 1.4.2 as declared by `docs/package.json`. Keep mail credentials out of test fixtures and CI logs.
 
@@ -62,7 +62,7 @@ The `internal/oauth` fixtures use synthetic owner identities and ephemeral test 
 
 The OAuth Redis integration tests use the same `ANGELOS_TEST_REDIS_ADDR` loopback fixture as dispatch tests. They cover concurrent one-time consumption across instances, state surviving a new store instance, owner/bootstrap CAS, TTLs, owner isolation, refresh rotation/replay, grant revocation/limits, and fail-closed ambiguous responses without automatic retries. They skip without the fixture. Keep the existing dispatch atomic-claim and receipt-retention suites in the same verification run.
 
-Resource-server tests check local public keys and grant validation. MCP discovery tests check identical top-level and `_meta` security schemes, preservation of schemas/large integer values and result metadata, and concurrency without mutating registered tools. Conditional Sent filing requests all three needed scopes in its OAuth challenge before claiming or sending a prepared message; deployment-disabled errors remain separate. Read [First-party OAuth](/docs/first-party-oauth#rollout-and-live-acceptance) for the separate owner setup and real ChatGPT acceptance checklist; passing automated fixtures does not complete it.
+Resource-server tests check local public keys and grant validation. MCP discovery tests check identical top-level and `_meta` security schemes, preservation of schemas/large integer values and result metadata, and concurrency without mutating registered tools. Conditional Sent filing requests all three needed scopes in its OAuth challenge before claiming or sending a prepared message; deployment-disabled errors remain separate. Read [Connect Your Assistant](/docs/quickstart) for the owner setup and real ChatGPT acceptance checklist; passing automated fixtures does not complete it.
 
 An optional browser contract test uses Playwright, Chromium, and a CDP virtual authenticator to exercise the shipped JavaScript, cookies, consent redirect/CSP, sign-in, backup enrollment, and revocation. With Node able to resolve `playwright` and a compatible Chromium installed, run `ANGELOS_BROWSER_TEST=1 go test ./internal/oauth -run '^TestBrowserChromiumVirtualAuthenticator$' -v`. Set `CHROMIUM_EXECUTABLE_PATH` for a non-default Chromium installation, and `NODE_PATH` if Playwright is outside normal module resolution. All application requests are intercepted into a loopback fixture; unexpected origins are blocked. The test skips by default and is not part of the Go-only CI promise. A successful virtual-browser run still does not validate a real owner passkey or ChatGPT account.
 
@@ -83,7 +83,7 @@ The separate documentation CI job uses the same check-then-build order. See [Imp
 
 A live test is an operation against an actual account. Reading, changing flags, creating folders, saving drafts, moving messages, and sending mail have different effects; verify only the operations intended for that test account.
 
-Begin with authentication and read-only checks from [Deploy the API](/docs/deployment). Test writes using disposable messages and folders. A successful SMTP transaction confirms server acceptance, not inbox delivery. Never repeat an uncertain send just to make a test appear successful.
+Begin with authentication and read-only checks from [Connect Your Assistant](/docs/quickstart#1-create-your-vercel-api-project). Test writes using disposable messages and folders. A successful SMTP transaction confirms server acceptance, not inbox delivery. Never repeat an uncertain send just to make a test appear successful.
 
 When reporting verification, distinguish checks that passed, checks that failed, checks blocked by the environment, and live integration checks that have not been performed.
 
@@ -91,4 +91,4 @@ When reporting verification, distinguish checks that passed, checks that failed,
 
 ## Agent batch and error fixtures
 
-`TestReadMany*` uses exact-reference fake reads and signed MCP calls to verify input ordering, mixed stale/missing failures, 64-bit MODSEQ fidelity, UTF-8 JSON budgets, explicit continuation, invalid input rejection before backend access, and scope enforcement. `TestReadManyWorkflowMetrics` reports actual complete MCP result bytes and the five-to-one call comparison. `TestToolSchemaTokenBudget` keeps the structural tool definitions below 70% of the checked-in original 17-tool baseline. A separate allowance of at most 512 bytes covers only the duplicated top-level `securitySchemes` required alongside the legacy `_meta` mirror; the test also reports complete wire bytes, including that duplication. Classified error tests cover recovery codes, deployment gates, OAuth metadata, partial outcomes, and conservative mutation/unknown-outcome retry behavior. These tests do not exercise a live mailbox or verify delivery.
+`TestReadMany*` uses exact-reference fake reads and signed MCP calls to verify input ordering, mixed stale/missing failures, 64-bit MODSEQ fidelity, UTF-8 JSON budgets, explicit continuation, invalid input rejection before backend access, and scope enforcement. `TestReadManyWorkflowMetrics` reports actual complete MCP result bytes and the five-to-one call comparison. `TestToolSchemaTokenBudget` limits structural definitions to 70% of the unchanged original 17-tool baseline plus a bounded 768-byte allowance for the three structured-draft actions. A separate allowance of at most 512 bytes covers only the duplicated top-level `securitySchemes` required alongside the legacy `_meta` mirror; the test also reports complete wire bytes, including that duplication. Classified error tests cover recovery codes, deployment gates, OAuth metadata, partial outcomes, and conservative mutation/unknown-outcome retry behavior. These tests do not exercise a live mailbox or verify delivery.

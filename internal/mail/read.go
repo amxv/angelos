@@ -693,6 +693,15 @@ func fetchSearchSummaries(s *imapSession, folder string, validity uint32, uids [
 	return out, nil
 }
 func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
+	out, err := b.readRaw(ctx, ref)
+	if err == nil {
+		parseMessage(out.raw, &out)
+	}
+	return out, err
+}
+
+// readRaw keeps complete source bytes separate from the bounded display parser.
+func (b *Backend) readRaw(ctx context.Context, ref Reference) (Message, error) {
 	out := Message{Headers: map[string]string{}, Attachments: []Attachment{}}
 	if !validFolder(ref.Folder) || ref.UID == 0 || ref.UIDValidity == 0 {
 		return out, ErrInvalidInput
@@ -708,7 +717,8 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 	part := &imap.FetchItemBodySection{Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: maxMessageBytes + 1}}
 	cmd := s.client.Fetch(imap.UIDSetNum(imap.UID(ref.UID)), &imap.FetchOptions{UID: true, Envelope: true, Flags: true, InternalDate: true, RFC822Size: true, ModSeq: s.modseq, BodySection: []*imap.FetchItemBodySection{part}})
 	found := false
-	gotBody := false
+	gotBody, gotUID, gotFlags, gotSize := false, false, false, false
+	fail := func() (Message, error) { s.cleanup(); cmd.Close(); return out, ErrUnavailable }
 	var raw []byte
 	buf := &imapclient.FetchMessageBuffer{}
 	for data := cmd.Next(); data != nil; data = cmd.Next() {
@@ -721,12 +731,24 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 		for item := data.Next(); item != nil; item = data.Next() {
 			switch v := item.(type) {
 			case imapclient.FetchItemDataUID:
+				if gotUID {
+					return fail()
+				}
+				gotUID = true
 				buf.UID = v.UID
 			case imapclient.FetchItemDataEnvelope:
 				buf.Envelope = v.Envelope
 			case imapclient.FetchItemDataFlags:
+				if gotFlags {
+					return fail()
+				}
+				gotFlags = true
 				buf.Flags = v.Flags
 			case imapclient.FetchItemDataRFC822Size:
+				if gotSize {
+					return fail()
+				}
+				gotSize = true
 				buf.RFC822Size = v.Size
 			case imapclient.FetchItemDataInternalDate:
 				buf.InternalDate = v.Time
@@ -735,6 +757,9 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 			case imapclient.FetchItemDataBodySection:
 				if !v.MatchCommand(part) {
 					continue
+				}
+				if gotBody || v.Literal == nil {
+					return fail()
 				}
 				gotBody = true
 				if v.Literal != nil {
@@ -764,7 +789,7 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 	if !found || uint32(buf.UID) != ref.UID {
 		return out, ErrNotFound
 	}
-	if !gotBody {
+	if !gotBody || !gotUID || !gotFlags || !gotSize {
 		return out, ErrUnavailable
 	}
 	out.Summary = summaryFromBuffer(buf, ref.Folder, ref.UIDValidity)
@@ -772,6 +797,5 @@ func (b *Backend) Read(ctx context.Context, ref Reference) (Message, error) {
 		out.Truncated = true
 	}
 	out.raw = raw
-	parseMessage(raw, &out)
 	return out, nil
 }

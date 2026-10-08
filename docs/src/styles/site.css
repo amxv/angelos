@@ -203,3 +203,14 @@ em { font-weight: inherit; }
 .arrow-icon { display: inline-block; height: 1em; width: 1em; vertical-align: -.12em; flex-shrink: 0; }
 .guide-entrances h2 .arrow-icon, .guide-map h3 .arrow-icon { color: var(--signal); font-size: .7em; }
 .coverage-note, .demo-disclaimer { font-size: .75rem; }
+
+/* A single, prominent setup path; details stay in the handbook. */
+.setup-feature { display: flex; justify-content: space-between; gap: 2rem; padding: 2rem; margin: 0 0 1.5rem; border: 1px solid var(--line); border-left: 3px solid var(--signal); border-radius: 5px; background: var(--surface); color: var(--ink); }
+.setup-feature:hover { text-decoration: none; background: var(--surface-muted); }
+.setup-feature .path-label { color: var(--signal); }
+.setup-feature h2 { margin: .65rem 0; font-size: clamp(1.8rem, 3vw, 2.7rem); }
+.setup-feature p { max-width: 620px; color: var(--muted); font-size: .9rem; line-height: 1.7; }
+.setup-feature__steps { flex-shrink: 0; align-self: center; border-left: 1px solid var(--line); padding-left: 2rem; font-family: var(--font-mono); color: var(--muted); font-size: .7rem; line-height: 2.2; }
+.setup-route { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.75rem 0; }
+.setup-route span { border: 1px solid var(--line); border-radius: 4px; padding: .45rem .65rem; font-size: .72rem; font-family: var(--font-mono); color: var(--signal); background: var(--surface); }
+@media (max-width: 640px) { .setup-feature { padding: 1.3rem; }.setup-feature__steps { display: none; } }

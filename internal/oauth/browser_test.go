@@ -199,10 +199,13 @@ type browserHarness struct {
 
 func newBrowserHarness(t *testing.T) *browserHarness {
 	t.Helper()
+	return newBrowserHarnessWithConfig(t, coreTestConfig(t))
+}
+func newBrowserHarnessWithConfig(t *testing.T, config Config) *browserHarness {
+	t.Helper()
 	store := newBrowserMemoryStore()
 	secret, _ := browserRandom()
 	h := &browserHarness{t: t, store: store, bootstrap: secret, now: time.Now().Truncate(time.Second)}
-	config := coreTestConfig(t)
 	config.BootstrapTokenHash = browserHash(secret)
 	server, err := New(config, store)
 	if err != nil {
@@ -215,7 +218,7 @@ func newBrowserHarness(t *testing.T) *browserHarness {
 }
 func (h *browserHarness) request(method, path, body, typ, origin string) *httptest.ResponseRecorder {
 	h.t.Helper()
-	r := httptest.NewRequest(method, Issuer+path, strings.NewReader(body))
+	r := httptest.NewRequest(method, h.browser.server.config.Issuer+path, strings.NewReader(body))
 	if h.cookie != nil {
 		r.AddCookie(h.cookie)
 	}
@@ -249,12 +252,12 @@ func (h *browserHarness) get(path string) *httptest.ResponseRecorder {
 func (h *browserHarness) post(path string, body any) *httptest.ResponseRecorder {
 	h.t.Helper()
 	raw, _ := json.Marshal(body)
-	return h.request(http.MethodPost, path, string(raw), "application/json", Issuer)
+	return h.request(http.MethodPost, path, string(raw), "application/json", h.browser.server.config.Issuer)
 }
 func (h *browserHarness) form(path string, values url.Values) *httptest.ResponseRecorder {
 	h.t.Helper()
 	values.Set("csrf", h.csrf)
-	return h.request(http.MethodPost, path, values.Encode(), "application/x-www-form-urlencoded", Issuer)
+	return h.request(http.MethodPost, path, values.Encode(), "application/x-www-form-urlencoded", h.browser.server.config.Issuer)
 }
 func (h *browserHarness) begin(register bool) (string, string) {
 	h.t.Helper()
@@ -343,7 +346,7 @@ func (h *browserHarness) enroll() *virtualAuthenticator {
 	h.t.Helper()
 	a := newVirtualAuthenticator(h.t)
 	id, challenge := h.begin(true)
-	response := h.post("/oauth/passkeys/register/finish", map[string]any{"ceremony": id, "credential": a.registration(h.t, challenge, Issuer, passkeyRPID, 0x45)})
+	response := h.post("/oauth/passkeys/register/finish", map[string]any{"ceremony": id, "credential": a.registration(h.t, challenge, h.browser.server.config.Issuer, h.browser.server.config.passkeyRPID(), 0x45)})
 	if response.Code != 200 {
 		h.t.Fatalf("enroll: %d %s", response.Code, response.Body)
 	}
@@ -577,7 +580,7 @@ func (h *browserHarness) authorize(scopes string) (string, string) {
 	verifier, _ := browserRandom()
 	digest := sha256.Sum256([]byte(verifier))
 	c := h.browser.server.config.Clients[0]
-	params := url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "resource": {Resource}, "state": {"opaque-client-state"}, "scope": {scopes}, "code_challenge": {b64(digest[:])}, "code_challenge_method": {"S256"}}
+	params := url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "resource": {h.browser.server.config.Resource}, "state": {"opaque-client-state"}, "scope": {scopes}, "code_challenge": {b64(digest[:])}, "code_challenge_method": {"S256"}}
 	response := h.get("/oauth/authorize?" + params.Encode())
 	if response.Code != 303 {
 		h.t.Fatalf("authorize: %d %s", response.Code, response.Body)
@@ -591,7 +594,14 @@ func (h *browserHarness) authorize(scopes string) (string, string) {
 	return session.PendingID, verifier
 }
 func TestBrowserFullAuthorizationPasskeyConsentCodeExchangeAndRevoke(t *testing.T) {
-	h := newBrowserHarness(t)
+	for _, issuer := range deploymentIssuers {
+		t.Run(issuer, func(t *testing.T) { testBrowserAuthorizationAtIssuer(t, issuer) })
+	}
+}
+func testBrowserAuthorizationAtIssuer(t *testing.T, issuer string) {
+	config := coreTestConfig(t)
+	config.Issuer, config.Resource = issuer, issuer+"/mcp"
+	h := newBrowserHarnessWithConfig(t, config)
 	id, verifier := h.authorize("mail.read mail.write mail.send")
 	h.enroll() // Initial bootstrap also completes real UV registration then rotates the owner session.
 	response := h.get("/oauth/consent?request=" + id)
@@ -618,11 +628,11 @@ func TestBrowserFullAuthorizationPasskeyConsentCodeExchangeAndRevoke(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if callback.Host != "client.example.com" || callback.Query().Get("iss") != Issuer || callback.Query().Get("state") != "opaque-client-state" || callback.Query().Get("code") == "" {
+	if callback.Host != "client.example.com" || callback.Query().Get("iss") != h.browser.server.config.Issuer || callback.Query().Get("state") != "opaque-client-state" || callback.Query().Get("code") == "" {
 		t.Fatal("invalid issuer/state/callback", callback)
 	}
 	c := h.browser.server.config.Clients[0]
-	params := url.Values{"grant_type": {"authorization_code"}, "client_id": {c.ID}, "resource": {Resource}, "redirect_uri": {c.RedirectURIs[0]}, "code": {callback.Query().Get("code")}, "code_verifier": {verifier}}
+	params := url.Values{"grant_type": {"authorization_code"}, "client_id": {c.ID}, "resource": {h.browser.server.config.Resource}, "redirect_uri": {c.RedirectURIs[0]}, "code": {callback.Query().Get("code")}, "code_verifier": {verifier}}
 	// OAuth backchannel token requests deliberately do not require browser cookies or CSRF.
 	response = h.request("POST", "/oauth/token", params.Encode(), "application/x-www-form-urlencoded", "")
 	if response.Code != 200 {
@@ -643,7 +653,7 @@ func TestBrowserFullAuthorizationPasskeyConsentCodeExchangeAndRevoke(t *testing.
 	}
 	var claims accessClaims
 	_ = json.Unmarshal(payload, &claims)
-	if claims.Scope != "mail.read mail.send" || claims.Subject != h.browser.server.config.OwnerSubject || claims.Audience != Resource || claims.Issuer != Issuer {
+	if claims.Scope != "mail.read mail.send" || claims.Subject != h.browser.server.config.OwnerSubject || claims.Audience != h.browser.server.config.Resource || claims.Issuer != h.browser.server.config.Issuer {
 		t.Fatal("wrong access claims")
 	}
 	if response = h.form("/oauth/consent", url.Values{"request": {id}, "decision": {"approve"}, "scope": {"mail.read"}}); response.Code != 400 {
@@ -731,14 +741,14 @@ func TestPasskeyExpiredCeremonyAndLoginCSPRemainClosed(t *testing.T) {
 	for _, headers := range []http.Header{{"Origin": {"null"}}, {"Origin": {Issuer, Issuer}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"same-origin", "cross-site"}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"cross-site"}}} {
 		r := httptest.NewRequest("POST", Issuer+"/oauth/logout", nil)
 		r.Header = headers
-		if browserOrigin(r) {
+		if browserOrigin(r, Issuer) {
 			t.Fatal("ambiguous/cross-site origin accepted")
 		}
 	}
 	for _, headers := range []http.Header{{"Origin": {Issuer}}, {"Origin": {Issuer}, "Sec-Fetch-Site": {"same-origin"}}} {
 		r := httptest.NewRequest("POST", Issuer+"/oauth/logout", nil)
 		r.Header = headers
-		if !browserOrigin(r) {
+		if !browserOrigin(r, Issuer) {
 			t.Fatal("legitimate same-origin browser submission rejected")
 		}
 	}

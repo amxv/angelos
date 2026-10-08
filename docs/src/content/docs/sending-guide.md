@@ -52,9 +52,25 @@ Prepared content is temporarily stored in the operator's configured service. See
 
 > Save a new draft in my mailbox for later. Do not send it.
 
-Saving requires mailbox-write permission and enabled writes. It creates a new message in the discovered Drafts folder, or an explicit folder you choose. It does not replace an existing draft. Lossless opening and editing of saved drafts is not supported, and a read result is not a complete reconstruction of the original message.
+Saving requires mailbox-write permission and enabled writes. A new draft goes to the discovered Drafts folder, or a folder you choose.
 
-Use your regular mail app when you need to edit an existing draft in place. A prepared send is different: its review window expires after 15 minutes.
+To continue an existing draft:
+
+> Open this saved draft with Angelos’s draft reader. Show me its recipients, full text and attachments. Don’t change it yet.
+
+For a supported draft, ask:
+
+> Save a revised copy with the new wording. Keep the original draft. Update the HTML version too, or clear it if we only want plain text.
+
+Revisions create a new copy in the same folder by default. They never overwrite or delete the original. If another mail client has changed the draft, Angelos asks for a fresh read instead of silently applying changes to an older version.
+
+When you are ready:
+
+> Prepare this saved version for sending and show me the complete preview. Don’t send until I approve it.
+
+Preparation captures that reviewed version for 15 minutes; later edits in your mail app do not update it. Sending does not remove the saved draft. If you want to tidy old copies, review that as a separate mailbox change.
+
+Some drafts cannot be safely rebuilt, including inline-image, signed/encrypted, and unsupported-header messages. Angelos rejects them instead of dropping content. Use your original mail app for those drafts or for an in-place edit. [Exact draft limits](/docs/tools#saved-draft-lifecycle)
 
 ## Understand the send result
 

@@ -3,7 +3,8 @@
 'use strict';
 const assert = require('node:assert/strict');
 const {chromium} = require('playwright');
-const issuer = 'https://api.angelos.ashray.xyz';
+const issuer = process.env.BROWSER_ISSUER;
+assert.ok(issuer, 'A fixture issuer is required');
 async function main() {
  const browser = await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE_PATH || undefined,args:['--no-sandbox']});
  try {
@@ -44,6 +45,10 @@ async function main() {
   assert.match(await page.locator('main').innerText(), /Permissions: mail.read/);
   const oldCookie = (await context.cookies(issuer)).find(c => c.name==='__Host-angelos');
   assert.ok(oldCookie.secure && oldCookie.httpOnly && oldCookie.sameSite==='Lax');
+  assert.equal(oldCookie.domain, new URL(issuer).hostname);
+  const credentials = await cdp.send('WebAuthn.getCredentials', {authenticatorId:first.authenticatorId});
+  assert.ok(credentials.credentials.length > 0);
+  assert.ok(credentials.credentials.every(c => c.rpId === new URL(issuer).hostname));
   await page.getByRole('button',{name:'Sign out'}).click();
   await page.waitForURL(issuer + '/oauth/login');
   await page.getByRole('button',{name:'Sign in with a passkey'}).click();
@@ -58,7 +63,7 @@ async function main() {
   await page.getByRole('button',{name:'Revoke this access'}).click();
   await page.waitForFunction(() => document.body.innerText.includes('No connected clients.'));
   assert.deepEqual(errors,[], 'Browser console/CSP errors');
-  console.log('Chromium virtual WebAuthn: enrollment, exact consent, cross-origin callback, sign-in rotation, second authenticator, grant revocation passed.');
+  console.log(issuer + ' Chromium virtual WebAuthn: enrollment, exact consent, cross-origin callback, sign-in rotation, second authenticator, grant revocation passed.');
  } finally { await browser.close(); }
 }
 main().catch(error => {console.error(error);process.exitCode=1;});

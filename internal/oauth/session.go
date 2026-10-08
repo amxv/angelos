@@ -212,13 +212,13 @@ func (b *Browser) requireSession(w http.ResponseWriter, r *http.Request, authent
 	}
 	return token, session, true
 }
-func browserOrigin(r *http.Request) bool {
+func browserOrigin(r *http.Request, issuer string) bool {
 	origins := r.Header.Values("Origin")
 	sites := r.Header.Values("Sec-Fetch-Site")
-	return len(origins) == 1 && origins[0] == Issuer && (len(sites) == 0 || (len(sites) == 1 && sites[0] == "same-origin"))
+	return len(origins) == 1 && origins[0] == issuer && (len(sites) == 0 || (len(sites) == 1 && sites[0] == "same-origin"))
 }
 func (b *Browser) csrf(w http.ResponseWriter, r *http.Request, session *browserSession, value string) bool {
-	if !browserOrigin(r) || !equalSecret(session.CSRF, value) {
+	if !browserOrigin(r, b.server.config.Issuer) || !equalSecret(session.CSRF, value) {
 		browserError(w, http.StatusForbidden, "Invalid browser request.")
 		return false
 	}

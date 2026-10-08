@@ -186,7 +186,7 @@ func coreAuthorization(s *Server) (AuthorizationRequest, string) {
 	verifier := strings.Repeat("v", 64)
 	digest := sha256.Sum256([]byte(verifier))
 	c := s.config.Clients[0]
-	return AuthorizationRequest{ClientID: c.ID, ClientName: c.Name, RedirectURI: c.RedirectURIs[0], Resource: Resource, State: "state-for-this-request", Challenge: base64.RawURLEncoding.EncodeToString(digest[:]), Scopes: []string{ScopeRead, ScopeSend}}, verifier
+	return AuthorizationRequest{ClientID: c.ID, ClientName: c.Name, RedirectURI: c.RedirectURIs[0], Resource: s.config.Resource, State: "state-for-this-request", Challenge: base64.RawURLEncoding.EncodeToString(digest[:]), Scopes: []string{ScopeRead, ScopeSend}}, verifier
 }
 func coreCode(t *testing.T, s *Server) (url.Values, string) {
 	t.Helper()
@@ -199,13 +199,13 @@ func coreCode(t *testing.T, s *Server) (url.Values, string) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if u.Query().Get("iss") != Issuer || u.Query().Get("state") != a.State {
+	if u.Query().Get("iss") != s.config.Issuer || u.Query().Get("state") != a.State {
 		t.Fatal("issuer/state missing", redirect)
 	}
-	return url.Values{"grant_type": {"authorization_code"}, "code": {u.Query().Get("code")}, "client_id": {a.ClientID}, "redirect_uri": {a.RedirectURI}, "resource": {Resource}, "code_verifier": {v}}, u.Query().Get("code")
+	return url.Values{"grant_type": {"authorization_code"}, "code": {u.Query().Get("code")}, "client_id": {a.ClientID}, "redirect_uri": {a.RedirectURI}, "resource": {s.config.Resource}, "code_verifier": {v}}, u.Query().Get("code")
 }
 func coreToken(s *Server, values url.Values) *httptest.ResponseRecorder {
-	r := httptest.NewRequest(http.MethodPost, Issuer+"/oauth/token", strings.NewReader(values.Encode()))
+	r := httptest.NewRequest(http.MethodPost, s.config.Issuer+"/oauth/token", strings.NewReader(values.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
@@ -496,7 +496,18 @@ func TestCoreFailClosedAndCanonicalRequest(t *testing.T) {
 }
 
 func TestCoreIssuedAccessInitializesMCPAndListsSixTools(t *testing.T) {
-	s, m := coreServer(t)
+	for _, issuer := range deploymentIssuers {
+		t.Run(issuer, func(t *testing.T) { testCoreIssuedAccessAtIssuer(t, issuer) })
+	}
+}
+func testCoreIssuedAccessAtIssuer(t *testing.T, issuer string) {
+	config := coreTestConfig(t)
+	config.Issuer, config.Resource = issuer, issuer+"/mcp"
+	m := newCoreMemoryStore()
+	s, err := New(config, m)
+	if err != nil {
+		t.Fatal(err)
+	}
 	p, _ := coreCode(t, s)
 	w := coreToken(s, p)
 	if w.Code != 200 {
@@ -505,14 +516,14 @@ func TestCoreIssuedAccessInitializesMCPAndListsSixTools(t *testing.T) {
 	out := coreTokenValues(t, w)
 	access := out["access_token"].(string)
 	claims := coreClaims(t, access)
-	verifier, e := auth.New(auth.Config{Issuer: Issuer, ResourceURL: Resource, JWKSURL: Issuer + JWKSPath, AllowedSubjects: []string{s.config.OwnerSubject}, LocalJWKS: s.JWKS(), CheckGrant: s.GrantActive})
+	verifier, e := auth.New(auth.Config{Issuer: issuer, ResourceURL: config.Resource, JWKSURL: issuer + JWKSPath, AllowedSubjects: []string{s.config.OwnerSubject}, LocalJWKS: s.JWKS(), CheckGrant: s.GrantActive})
 	if e != nil {
 		t.Fatal(e)
 	}
 	application := &app.App{AuthChallenge: verifier.Challenge}
 	handler := verifier.Middleware(application.Handler())
 	call := func(body string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest("POST", Resource, strings.NewReader(body))
+		r := httptest.NewRequest("POST", config.Resource, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+access)
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Accept", "application/json, text/event-stream")
@@ -534,7 +545,7 @@ func TestCoreIssuedAccessInitializesMCPAndListsSixTools(t *testing.T) {
 	}
 	m.fail = true
 	w = call(`{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}`)
-	if w.Code != 401 || !strings.Contains(w.Header().Get("WWW-Authenticate"), `resource_metadata="`+Issuer+auth.MetadataPath+`"`) {
+	if w.Code != 401 || !strings.Contains(w.Header().Get("WWW-Authenticate"), `resource_metadata="`+issuer+auth.MetadataPath+`"`) {
 		t.Fatal("Redis outage did not fail closed", w.Code, w.Header())
 	}
 	m.fail = false

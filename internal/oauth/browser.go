@@ -37,7 +37,7 @@ type browserPage struct {
 }
 
 func NewBrowser(server *Server) (*Browser, error) {
-	passkeys, err := newPasskeys()
+	passkeys, err := newPasskeys(server.config)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (b *Browser) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		browserHeaders(w)
 		// No proxy header can relax the canonical issuer or relying party.
-		if !canonicalRequest(r) {
+		if !b.server.config.MatchRequest(r) {
 			browserError(w, 400, "Invalid host.")
 			return
 		}
@@ -120,7 +120,7 @@ func (b *Browser) Handler() http.Handler {
 			browserError(w, 405, "Method not allowed.")
 			return
 		}
-		if r.Method == http.MethodPost && !browserOrigin(r) {
+		if r.Method == http.MethodPost && !browserOrigin(r, b.server.config.Issuer) {
 			browserError(w, 403, "Invalid browser origin.")
 			return
 		}

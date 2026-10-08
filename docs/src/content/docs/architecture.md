@@ -43,7 +43,7 @@ The root Go service is independent of the static `docs/` workspace. Documentatio
 - Gmail access tokens have an expiry-bounded, credential-bound in-memory cache per backend; Google refresh credentials remain in the server environment. Concurrent connections share a refresh, without automatically retrying mail operations.
 - Prepared sends and dispatch records live in a Redis REST store, shared with first-party OAuth infrastructure but isolated by key namespace.
 
-Sending is disabled without that store. A configured store can still serve authorized read-only receipts while sending is disabled. With an external issuer, mailbox reads and ordinary writes do not require it. First-party mode requires Redis for OAuth and authenticated MCP calls even with every mutation gate disabled. A function instance's memory is never used as the sole duplicate-send guard. See [OAuth state and recovery](/docs/first-party-oauth#redis-state-and-retention) for namespace, retention, and failure boundaries.
+Sending is disabled without that store. A configured store can still serve authorized read-only receipts while sending is disabled. With an external issuer, mailbox reads and ordinary writes do not require it. First-party mode requires Redis for OAuth and authenticated MCP calls even with every mutation gate disabled. A function instance's memory is never used as the sole duplicate-send guard. See [OAuth state and recovery](/docs/oauth-reference#redis-state-and-retention) for namespace, retention, and failure boundaries.
 
 ## Deliberate boundaries
 

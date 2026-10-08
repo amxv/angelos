@@ -8,7 +8,7 @@ export const siteConfig = {
   accentColorDark: "#f4926f"
 } as const;
 
-export const docCategories = ["Get started", "Use your inbox", "Run Angelos", "Reference", "Contributing"] as const;
+export const docCategories = ["Get started", "Use your inbox", "Reference", "Contributing"] as const;
 export const primaryNav = [
   { href: "/docs", label: "Docs" },
   { href: siteConfig.repoUrl, label: "GitHub repository", external: true }

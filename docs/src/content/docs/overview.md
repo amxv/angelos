@@ -2,7 +2,7 @@
 title: Meet Angelos
 description: Let an AI assistant help with your existing inbox, while you keep the mail apps you already use.
 summary: What Angelos does, what you need, and where to start.
-order: 1
+order: 2
 category: Get started
 ---
 
@@ -37,15 +37,14 @@ Spacemail is the default provider. Gmail and Google Workspace are also supported
 
 ## Know the boundaries
 
-Angelos sees server mail, not local-only folders or unsynchronized drafts in a desktop app. Related-message lookup is not a complete account-wide thread: it can miss mail in other folders or without usable header links. Saving a draft creates a new message; lossless editing of an existing saved draft is not supported.
+Angelos sees server mail, not local-only folders or unsynchronized drafts in a desktop app. Related-message lookup is not a complete account-wide thread: it can miss mail in other folders or without usable header links. Supported structured drafts can be read, revised into a new saved copy, and prepared for review. Revisions preserve the original; unsupported or lossy MIME is rejected.
 
 It also does not manage mail accounts, provider filtering rules, or desktop-only rules. See [capabilities and limits](/docs/tools) for the exact surface.
 
 ## Choose your next step
 
-- **I have a connection URL:** follow [Connect your assistant](/docs/quickstart).
+- **I’m getting started:** follow [Connect Your Assistant](/docs/quickstart), from deployment to your first ChatGPT request.
 - **I want everyday examples:** open [Work with your inbox](/docs/inbox-guide) or [Write and send mail](/docs/sending-guide).
-- **I run the service:** follow [Self-host Angelos](/docs/self-hosting), then use the configuration and authentication reference as needed.
 - **I am building an agent:** use the [Agent playbook](/docs/agent-guide), then the [tool reference](/docs/tools).
 
 For shared-mailbox effects, private-data handling, and approval responsibilities, read [Safety and concurrency](/docs/safety).

@@ -6,7 +6,7 @@ order: 41
 category: Reference
 ---
 
-For a guided first setup, follow [Self-host Angelos](/docs/self-hosting); use this page to look up individual settings.
+For a guided first setup, follow [Connect Your Assistant](/docs/quickstart); use this page to look up individual settings.
 
 One Angelos deployment connects to one administrator-configured mailbox. Tool arguments cannot choose a mail server, supply a password, or change the sender account.
 
@@ -57,11 +57,11 @@ Spacemail and custom providers use the existing username/password flow. Gmail ha
 
 ## MCP access
 
-`MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, and `MCP_ALLOWED_SUBJECTS` are required. See [Set up OAuth access](/docs/authentication) for their exact constraints and accepted JWT format.
+`MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, and `MCP_ALLOWED_SUBJECTS` are required. See [OAuth reference](/docs/oauth-reference#external-issuer-requirements) for their exact constraints and accepted JWT format.
 
 ### First-party OAuth (opt-in)
 
-Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enabled, the four `MCP_*` settings above must use the [fixed issuer/resource and single-owner configuration](/docs/first-party-oauth#configuration). The same `ANGELOS_REDIS_REST_URL` and `ANGELOS_REDIS_REST_TOKEN` are required even with sending disabled. Set an explicit bare mailbox address in `MAIL_FROM` for the owner consent screen.
+Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enabled, the four `MCP_*` settings above must use the [configured origin and single-owner configuration](/docs/configuration#mcp-access). The same `ANGELOS_REDIS_REST_URL` and `ANGELOS_REDIS_REST_TOKEN` are required even with sending disabled. Set an explicit bare mailbox address in `MAIL_FROM` for the owner consent screen.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enab
 | `ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED` | Disabled | `1` enables only the pinned ChatGPT metadata identity described in the runbook |
 | `ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH` | Empty | Lowercase SHA-256 hex digest of the high-entropy one-time owner-enrollment token; remove after enrollment |
 
-Configure an allowed client before connecting. First-party mode does not expose dynamic client registration, passwords, or public account signup. The cookie name, secure flags, relying-party ID, allowed origin, and session lifetimes are fixed; there is no cookie signing secret or permissive development override. See [owner setup and recovery](/docs/first-party-oauth#owner-enrollment-and-recovery).
+Configure an allowed client before connecting. First-party mode does not expose dynamic client registration, passwords, or public account signup. The cookie name, secure flags, and session lifetimes are fixed; the relying-party ID and allowed origin come from the explicitly configured issuer; there is no cookie signing secret or permissive development override. See [owner setup and recovery](/docs/oauth-reference#owner-recovery).
 
 ## Optional capabilities
 
@@ -98,3 +98,11 @@ A valid configured store remains available for owner-scoped receipt reads when `
 Keep production credentials in the API project's secret environment settings. Public documentation and the static docs build do not need mail credentials. Do not give preview deployments production mailbox access by default.
 
 Start with read access, verify the correct mailbox and subject, then enable optional capabilities deliberately. Changes made through Angelos affect the same server mailbox used by other IMAP clients.
+
+## Hosting and runtime constraints
+
+The repository root is the Go API; `docs/` is a separate static Astro website and never needs mailbox secrets. The root Vercel build runs `go test -buildvcs=false ./... && go build -buildvcs=false -o server .`. The flag skips VCS metadata stamping, not tests. For local validation use the toolchain requested by `go.mod`; see [Run the tests](/docs/testing).
+
+For non-Vercel hosting, run the Go server behind HTTPS termination, preserve `/mcp` and the discovery/OAuth routes, and inject the environment before startup. `PORT` defaults to 8080. A local `.env` file is not automatically loaded. Built-in OAuth browser requests must use the configured public HTTPS origin, not localhost or an alternate preview domain.
+
+Keep per-operation mail timeouts within your host's function duration. Do not rely on background work continuing after an HTTP response. Vercel blocks SMTP port 25; use authenticated TLS submission on 465 or 587. Durable OAuth and send state must remain outside the server instance. See [Vercel SMTP guidance](https://vercel.com/kb/guide/serverless-functions-and-smtp).

@@ -56,7 +56,7 @@ func newHandler() http.Handler {
 		if err != nil {
 			authErr = auth.ErrInvalidToken
 		}
-	} else if authConfig.Issuer == oauth.Issuer {
+	} else if authConfig.Issuer == oauth.Issuer || sameRootIssuerOrigin(authConfig.Issuer, authConfig.ResourceURL) {
 		// The local issuer must always use online first-party grant revocation,
 		// even if all resource-server environment variables happen to be set.
 		authErr = auth.ErrInvalidToken
@@ -106,26 +106,39 @@ func newHandler() http.Handler {
 	})
 	var handler http.Handler = mux
 	if firstParty {
-		handler = canonicalHost(handler)
+		handler = canonicalHost(handler, os.Getenv("MCP_OAUTH_ISSUER"))
 	}
 	return secureHeaders(handler)
 }
 
-func canonicalHost(next http.Handler) http.Handler {
+// A root issuer on the MCP origin must use first-party mode and its online
+// grant checks. Path-based external issuers remain supported on the same host.
+// Compare origin components here only to detect that boundary; token issuer and
+// audience validation remain byte-for-byte exact in the resource server.
+func sameRootIssuerOrigin(a, b string) bool {
+	left, leftErr := url.Parse(a)
+	right, rightErr := url.Parse(b)
+	if leftErr != nil || rightErr != nil || (left.Path != "" && left.Path != "/") || left.Scheme != "https" || right.Scheme != "https" || left.Hostname() == "" || !strings.EqualFold(left.Hostname(), right.Hostname()) {
+		return false
+	}
+	port := func(u *url.URL) string {
+		if u.Port() == "" {
+			return "443"
+		}
+		return u.Port()
+	}
+	return port(left) == port(right)
+}
+
+func canonicalHost(next http.Handler, issuer string) http.Handler {
+	// The issuer is trusted deployment configuration, captured at construction.
+	// Reuse the authorization server's exact host/proxy checks for MCP and all
+	// discovery routes before allowing the platform's internal loopback hop.
+	config := oauth.Config{Issuer: issuer}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Vercel injects the RFC 7239 Forwarded header on legitimate requests.
-		// It is never trusted for issuer, origin, host, or redirect decisions;
-		// validate the actual Host and platform-normalized forwarding headers.
-		if r.Host != "api.angelos.ashray.xyz" || (r.URL.Host != "" && r.URL.Host != r.Host) {
+		if !config.MatchRequest(r) {
 			http.Error(w, "invalid host", http.StatusBadRequest)
 			return
-		}
-		for name, want := range map[string]string{"X-Forwarded-Host": r.Host, "X-Forwarded-Proto": "https"} {
-			values := r.Header.Values(name)
-			if len(values) > 1 || (len(values) == 1 && values[0] != want) {
-				http.Error(w, "invalid host", http.StatusBadRequest)
-				return
-			}
 		}
 		next.ServeHTTP(w, r)
 	})

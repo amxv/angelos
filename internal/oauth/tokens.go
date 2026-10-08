@@ -112,7 +112,7 @@ type accessClaims struct {
 
 func (s *Server) signAccess(grant Grant, scopes []string) (string, error) {
 	now := s.now()
-	if grant.Subject != s.config.OwnerSubject || grant.Resource != Resource || grant.ExpiresUnix <= now.Unix() || !scopeSubset(scopes, grant.Scopes) {
+	if grant.Subject != s.config.OwnerSubject || grant.Resource != s.config.Resource || grant.ExpiresUnix <= now.Unix() || !scopeSubset(scopes, grant.Scopes) {
 		return "", errors.New("invalid grant")
 	}
 	if _, err := canonicalScopes(scopes); err != nil {
@@ -127,7 +127,7 @@ func (s *Server) signAccess(grant Grant, scopes []string) (string, error) {
 		exp = grant.ExpiresUnix
 	}
 	header, _ := json.Marshal(map[string]string{"alg": "ES256", "kid": s.keys.kid, "typ": "at+jwt"})
-	payload, _ := json.Marshal(accessClaims{Issuer: Issuer, Audience: Resource, Subject: grant.Subject, Expires: exp, Issued: now.Unix(), ID: jti, Scope: strings.Join(scopes, " "), GrantID: grant.ID, ClientID: grant.ClientID, TokenUse: "access"})
+	payload, _ := json.Marshal(accessClaims{Issuer: s.config.Issuer, Audience: s.config.Resource, Subject: grant.Subject, Expires: exp, Issued: now.Unix(), ID: jti, Scope: strings.Join(scopes, " "), GrantID: grant.ID, ClientID: grant.ClientID, TokenUse: "access"})
 	input := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(payload)
 	digest := sha256.Sum256([]byte(input))
 	r, ss, err := ecdsa.Sign(rand.Reader, s.keys.private, digest[:])
@@ -154,7 +154,7 @@ func (s *Server) GrantActive(ctx context.Context, grantID, clientID, subject str
 	if err != nil {
 		return err
 	}
-	if grant.ID != grantID || grant.Subject != subject || grant.ClientID != clientID || grant.Resource != Resource || grant.ExpiresUnix <= s.now().Unix() || !scopeSubset(scopes, grant.Scopes) {
+	if grant.ID != grantID || grant.Subject != subject || grant.ClientID != clientID || grant.Resource != s.config.Resource || grant.ExpiresUnix <= s.now().Unix() || !scopeSubset(scopes, grant.Scopes) {
 		return ErrNotFound
 	}
 	return nil

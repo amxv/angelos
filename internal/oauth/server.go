@@ -63,7 +63,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if !canonicalRequest(r) {
+		if !s.config.MatchRequest(r) {
 			oauthError(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
@@ -73,7 +73,7 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"issuer": Issuer, "authorization_endpoint": Issuer + "/oauth/authorize", "token_endpoint": Issuer + "/oauth/token", "jwks_uri": Issuer + JWKSPath,
+				"issuer": s.config.Issuer, "authorization_endpoint": s.config.Issuer + "/oauth/authorize", "token_endpoint": s.config.Issuer + "/oauth/token", "jwks_uri": s.config.Issuer + JWKSPath,
 				"response_types_supported": []string{"code"}, "response_modes_supported": []string{"query"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
 				"code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": []string{"none"},
 				"scopes_supported": []string{ScopeRead, ScopeWrite, ScopeSend}, "authorization_response_iss_parameter_supported": true,
@@ -95,14 +95,20 @@ func (s *Server) Handler() http.Handler {
 	})
 }
 
-func canonicalRequest(r *http.Request) bool {
-	const host = "api.angelos.ashray.xyz"
+// MatchRequest enforces the configured origin on every first-party route,
+// including requests arriving over a platform's internal HTTP/loopback hop.
+// An invalid trusted issuer denies every request; request headers never select it.
+func (c Config) MatchRequest(r *http.Request) bool {
+	host, err := issuerHost(c.Issuer)
+	if err != nil {
+		return false
+	}
 	if r.Host != host || (r.URL.Scheme != "" && r.URL.Scheme != "https") || (r.URL.Host != "" && r.URL.Host != host) {
 		return false
 	}
 	// Vercel includes Forwarded on every request. Deliberately ignore it rather
 	// than interpreting untrusted proxy claims; Host and X-Forwarded-* are
-	// independently validated against the fixed first-party issuer above.
+	// independently validated against the explicitly configured first-party issuer.
 	for name, want := range map[string]string{"X-Forwarded-Host": host, "X-Forwarded-Proto": "https"} {
 		values := r.Header.Values(name)
 		if len(values) > 1 || (len(values) == 1 && values[0] != want) {
@@ -165,7 +171,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	a := AuthorizationRequest{ClientID: client.ID, ClientName: client.Name, RedirectURI: params.Get("redirect_uri"), Resource: params.Get("resource"), State: params.Get("state"), Challenge: params.Get("code_challenge")}
 	// No untrusted callback is used before both client and exact redirect match.
-	fail := func(code string) { http.Redirect(w, r, authorizationRedirect(a, "error", code), http.StatusSeeOther) }
+	fail := func(code string) { http.Redirect(w, r, s.authorizationRedirect(a, "error", code), http.StatusSeeOther) }
 	if !boundedText(a.State, 1024) {
 		fail("invalid_request")
 		return
@@ -174,7 +180,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		fail("unsupported_response_type")
 		return
 	}
-	if a.Resource != Resource {
+	if a.Resource != s.config.Resource {
 		fail("invalid_target")
 		return
 	}
@@ -203,7 +209,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 // ApproveAuthorization may only be called by the CSRF-protected browser flow
 // after a live owner session approves these precise scopes.
 func (s *Server) ApproveAuthorization(ctx context.Context, a AuthorizationRequest, subject string, approvedScopes []string) (string, error) {
-	if subject != s.config.OwnerSubject || a.Resource != Resource || !boundedText(a.State, 1024) || !validOpaque(a.Challenge) {
+	if subject != s.config.OwnerSubject || a.Resource != s.config.Resource || !boundedText(a.State, 1024) || !validOpaque(a.Challenge) {
 		return "", errors.New("invalid owner authorization")
 	}
 	client, err := s.resolveClient(ctx, a.ClientID)
@@ -227,11 +233,11 @@ func (s *Server) ApproveAuthorization(ctx context.Context, a AuthorizationReques
 		return "", err
 	}
 	now := s.now()
-	grant := Grant{ID: grantID, Subject: subject, ClientID: client.ID, ClientName: client.Name, Resource: Resource, Scopes: approved, CreatedUnix: now.Unix(), ExpiresUnix: now.Add(GrantTTL).Unix()}
+	grant := Grant{ID: grantID, Subject: subject, ClientID: client.ID, ClientName: client.Name, Resource: s.config.Resource, Scopes: approved, CreatedUnix: now.Unix(), ExpiresUnix: now.Add(GrantTTL).Unix()}
 	if err := s.store.CreateGrant(ctx, grant); err != nil {
 		return "", err
 	}
-	record := AuthorizationCode{Subject: subject, ClientID: client.ID, RedirectURI: a.RedirectURI, Resource: Resource, Scopes: approved, Challenge: a.Challenge, GrantID: grantID, ExpiresUnix: now.Add(CodeTTL).Unix()}
+	record := AuthorizationCode{Subject: subject, ClientID: client.ID, RedirectURI: a.RedirectURI, Resource: s.config.Resource, Scopes: approved, Challenge: a.Challenge, GrantID: grantID, ExpiresUnix: now.Add(CodeTTL).Unix()}
 	encoded, err := json.Marshal(record)
 	if err == nil {
 		err = s.store.Put(ctx, "code", code, encoded, CodeTTL)
@@ -240,21 +246,21 @@ func (s *Server) ApproveAuthorization(ctx context.Context, a AuthorizationReques
 		_ = s.store.RevokeGrant(ctx, grantID)
 		return "", err
 	}
-	return authorizationRedirect(a, "code", code), nil
+	return s.authorizationRedirect(a, "code", code), nil
 }
 
 func (s *Server) DenyAuthorization(a AuthorizationRequest) string {
-	return authorizationRedirect(a, "error", "access_denied")
+	return s.authorizationRedirect(a, "error", "access_denied")
 }
 
-func authorizationRedirect(a AuthorizationRequest, kind, value string) string {
+func (s *Server) authorizationRedirect(a AuthorizationRequest, kind, value string) string {
 	u, err := url.Parse(a.RedirectURI)
 	if err != nil || !validRedirect(a.RedirectURI) {
-		return Issuer + "/oauth/login"
+		return s.config.Issuer + "/oauth/login"
 	}
 	q := u.Query()
 	q.Set(kind, value)
-	q.Set("iss", Issuer)
+	q.Set("iss", s.config.Issuer)
 	if a.State != "" {
 		q.Set("state", a.State)
 	}
@@ -299,7 +305,7 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_client")
 		return
 	}
-	if params.Get("resource") != Resource {
+	if params.Get("resource") != s.config.Resource {
 		oauthError(w, http.StatusBadRequest, "invalid_target")
 		return
 	}
@@ -339,7 +345,7 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, p url.Valu
 		return
 	}
 	var code AuthorizationCode
-	if strictJSON(data, &code) != nil || code.Subject != s.config.OwnerSubject || code.ClientID != client.ID || code.Resource != Resource || code.RedirectURI != p.Get("redirect_uri") || code.ExpiresUnix <= s.now().Unix() || !verifyPKCE(p.Get("code_verifier"), code.Challenge) {
+	if strictJSON(data, &code) != nil || code.Subject != s.config.OwnerSubject || code.ClientID != client.ID || code.Resource != s.config.Resource || code.RedirectURI != p.Get("redirect_uri") || code.ExpiresUnix <= s.now().Unix() || !verifyPKCE(p.Get("code_verifier"), code.Challenge) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
@@ -352,7 +358,7 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, p url.Valu
 		tokenStateError(w, err)
 		return
 	}
-	if grant.ID != code.GrantID || grant.Subject != code.Subject || grant.ClientID != client.ID || grant.Resource != Resource || grant.ExpiresUnix <= s.now().Unix() || !scopeSubset(code.Scopes, grant.Scopes) {
+	if grant.ID != code.GrantID || grant.Subject != code.Subject || grant.ClientID != client.ID || grant.Resource != s.config.Resource || grant.ExpiresUnix <= s.now().Unix() || !scopeSubset(code.Scopes, grant.Scopes) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
@@ -371,7 +377,7 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, p url.Valu
 		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
 		return
 	}
-	if err := s.store.CreateRefresh(r.Context(), refresh, Refresh{FamilyID: family, GrantID: grant.ID, Subject: code.Subject, ClientID: client.ID, Resource: Resource, Scopes: code.Scopes, ExpiresUnix: grant.ExpiresUnix}); err != nil {
+	if err := s.store.CreateRefresh(r.Context(), refresh, Refresh{FamilyID: family, GrantID: grant.ID, Subject: code.Subject, ClientID: client.ID, Resource: s.config.Resource, Scopes: code.Scopes, ExpiresUnix: grant.ExpiresUnix}); err != nil {
 		tokenStateError(w, err)
 		return
 	}
@@ -401,12 +407,12 @@ func (s *Server) exchangeRefresh(w http.ResponseWriter, r *http.Request, p url.V
 		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
 		return
 	}
-	ref, err := s.store.RotateRefresh(r.Context(), p.Get("refresh_token"), next, client.ID, Resource, s.now())
+	ref, err := s.store.RotateRefresh(r.Context(), p.Get("refresh_token"), next, client.ID, s.config.Resource, s.now())
 	if err != nil {
 		tokenStateError(w, err)
 		return
 	}
-	if ref.Subject != s.config.OwnerSubject || ref.ClientID != client.ID || ref.Resource != Resource || ref.ExpiresUnix <= s.now().Unix() {
+	if ref.Subject != s.config.OwnerSubject || ref.ClientID != client.ID || ref.Resource != s.config.Resource || ref.ExpiresUnix <= s.now().Unix() {
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
@@ -426,7 +432,7 @@ func (s *Server) exchangeRefresh(w http.ResponseWriter, r *http.Request, p url.V
 		tokenStateError(w, err)
 		return
 	}
-	if grant.ID != ref.GrantID || grant.ClientID != ref.ClientID || grant.Subject != ref.Subject || grant.Resource != Resource || !scopeSubset(scopes, grant.Scopes) {
+	if grant.ID != ref.GrantID || grant.ClientID != ref.ClientID || grant.Subject != ref.Subject || grant.Resource != s.config.Resource || !scopeSubset(scopes, grant.Scopes) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}

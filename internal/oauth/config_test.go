@@ -11,6 +11,10 @@ import (
 	"testing"
 )
 
+const passkeyRPID = "api.angelos.ashray.xyz"
+
+var deploymentIssuers = []string{Issuer, "https://owner-mail.vercel.app", "https://mail.owner.example.com"}
+
 func coreTestConfig(t *testing.T) Config {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -31,7 +35,7 @@ func TestCoreConfigFailsClosed(t *testing.T) {
 		change func(*Config)
 	}{
 		{"disabled", func(c *Config) { c.Enabled = false }},
-		{"issuer preview", func(c *Config) { c.Issuer = "https://preview.example.com" }},
+		{"issuer resource mismatch", func(c *Config) { c.Issuer = "https://preview.example.com" }},
 		{"resource slash", func(c *Config) { c.Resource = Resource + "/" }},
 		{"owner missing", func(c *Config) { c.OwnerSubject = "" }},
 		{"multiowner", func(c *Config) { c.OwnerSubject = "owner-a,owner-b" }},

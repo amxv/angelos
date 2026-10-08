@@ -4,10 +4,14 @@ An agent-native email interface in Go. Angelos exposes a single existing IMAP/SM
 
 The repository is private while under active development and is intended to be open sourced later. Optional mailbox writes, permanent deletion, and SMTP sending are disabled by default.
 
+## Get connected
+
+Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One guide takes you from your own Vercel deployment to your first read-only ChatGPT inbox request.
+
 ## Capabilities
 
 - Gmail/Workspace XOAUTH2 for personal/internal use, with pinned hosts and conservative Sent/delete safeguards
-- Six risk-separated MCP tools cover 22 operations with compact schemas and optional full-detail message results
+- Six risk-separated MCP tools cover 25 operations with compact schemas and optional full-detail message results
 - Read up to ten selected messages in one bounded call, with explicit per-item errors and continuation
 - Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links
 - Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
@@ -16,15 +20,16 @@ The repository is private while under active development and is intended to be o
 - Prepare messages, natural replies/reply-all, and quoted or attached forwards with reviewed To/CC/BCC, text/HTML, and bounded attachments
 - Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
 - Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
-- Opt into [first-party OAuth](./docs/src/content/docs/first-party-oauth.md) with owner passkeys, client consent, and Redis-backed token rotation/revocation
+- Self-host passkey OAuth on your own stable HTTPS domain, with client consent and Redis-backed token rotation/revocation
+- Read supported structured drafts, create append-only revisions, and prepare a reviewed draft for sending without changing the original
 
-Triage and conversation lookup are read-only: they fetch summaries and bounded selected headers, not message bodies, and do not mark mail read. Conversations use exact Message-ID/References/In-Reply-To links to a fixed anchor ID set, with no subject fallback or recursive expansion. Results do not claim mailbox-wide counts, urgency, or complete cross-folder threads. Read each exact reference for message content. Lossless editing of existing saved drafts is not supported.
+Triage and conversation lookup are read-only: they fetch summaries and bounded selected headers, not message bodies, and do not mark mail read. Conversations use exact Message-ID/References/In-Reply-To links to a fixed anchor ID set, with no subject fallback or recursive expansion. Results do not claim mailbox-wide counts, urgency, or complete cross-folder threads. Read each exact reference for message content. Draft revision supports a strict structured MIME subset and appends a new draft while preserving the original. Unsupported or lossy MIME is rejected.
 
 Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. Existing clients should follow the [tool migration guide](./docs/src/content/docs/tool-migration.md). See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
 
 ## Run and test
 
-Use the toolchain declared in [`go.mod`](./go.mod). Configure the required mailbox and OAuth environment variables from [Configuration](./docs/src/content/docs/configuration.md) and [Authentication](./docs/src/content/docs/authentication.md), then:
+Use the toolchain declared in [`go.mod`](./go.mod). Configure the required mailbox and OAuth environment variables from [Configuration](./docs/src/content/docs/configuration.md) and [OAuth reference](./docs/src/content/docs/oauth-reference.md), then:
 
 ```bash
 go mod download
@@ -37,7 +42,7 @@ Environment variables must be exported or injected by your runtime; the Go proce
 
 ## Deploy
 
-The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a separate Astro/ZueDocs project published at <https://angelos.ashray.xyz>. Keep their project roots and environment variables separate. See [Deploy the API](./docs/src/content/docs/deployment.md).
+The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a separate Astro/ZueDocs project published at <https://angelos.ashray.xyz>. Keep their project roots and environment variables separate. Follow [Connect Your Assistant](./docs/src/content/docs/quickstart.md) for the complete Vercel, Redis, mailbox, passkey, and ChatGPT setup.
 
 ## Safety boundaries
 

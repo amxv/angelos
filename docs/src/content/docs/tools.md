@@ -14,7 +14,7 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.7.0 exposes six tools for 22 operations: all 17 original operations plus reply-all, read-only send-status inspection, triage, conversation lookup, and bounded batch reading. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
+Angelos 0.8.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ Call `mail_query` with one of these actions:
 | `conversation` | `reference`, optional `search` with only `folder`/`order`/`cursor`/`limit`, `detail` | Same-folder header-linked summaries, anchor, coverage explanation, optional next cursor |
 | `read` | `reference`, optional `detail` | Text, selected headers, flags, attachment metadata, truncation warnings |
 | `read_many` | `references`, optional `detail`, `max_response_bytes` | 1–10 distinct exact references; ordered per-item results, bounded payload, explicit continuation |
+| `draft` | `reference` | Complete supported structured draft, source digest, original Message-ID, and rebuild warnings |
 | `attachment` | `reference`, one-based `index` | Attachment metadata and complete base64-encoded bytes |
 | `send_status` | `prepared_id` | Your minimal durable send receipt; never sends or claims |
 
@@ -218,6 +219,7 @@ These tools require `mail.write` and `MAIL_ENABLE_WRITES=1`.
 | `mail_create` / `folder` | `name` | Create a folder |
 | `mail_create` / `copy` | `reference`, `destination` | Copy one message into an existing folder |
 | `mail_create` / `draft` | `message`, optional `folder` | Append a new composed draft |
+| `mail_create` / `revise_draft` | `reference`, `source_digest`, `changes`, optional `folder` | Append a revision of a supported draft; preserve the original |
 | `mail_modify` / `flags` | `reference`, `operation`, `flags`, optional `unchanged_since` | Add or remove selected flags |
 | `mail_modify` / `rename` | `old`, `new` | Rename a folder; INBOX rename is excluded |
 | `mail_modify` / `move` | `reference`, `destination` | Move one message using native UID MOVE |
@@ -230,9 +232,33 @@ Where CONDSTORE is available, read/search results include `modseq`, and the serv
 
 Move and Trash require native MOVE support. Trash and implicit Drafts/Sent folder selection require a unique server-advertised SPECIAL-USE folder. Names are never guessed. Actual LIST role attributes are honored even without a SPECIAL-USE capability advertisement. Gmail labels overlap, and All Mail is not treated as Archive. A copy/move with server acceptance but no valid destination UID mapping returns `accepted` and a verification warning: a concurrently disappeared source can make the command an accepted no-op. Search the destination before taking another action. An append without a returned UID similarly requires a fresh search.
 
-Draft saving creates a new message and does not replace an older draft. Lossless opening and editing of an existing saved draft is not supported; read output is not a complete editable reconstruction of its original MIME. Its `message` uses the composition shape below. BCC is preserved in the private IMAP draft so another mail client can edit it. An omitted folder selects the discovered Drafts folder. Updating a draft is a deliberate new-save and separate old-message cleanup, with possible concurrent-client effects.
+Draft saving creates a new message and does not replace an older draft. Its `message` uses the composition shape below. BCC is preserved in the private IMAP draft. An omitted folder selects the discovered Drafts folder. For an existing draft, use the dedicated structured workflow below rather than reconstructing it from ordinary `read` output.
 
 Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-action user confirmation in the trusted client, and targeted UID EXPUNGE support. There is no ordinary mailbox-wide EXPUNGE, folder deletion, or deletion-on-close operation. An interrupted delete can leave a message marked Deleted without confirmed removal; inspect the account before retrying. Gmail/Workspace permanent deletion is unavailable even with that gate: its label UID removal does not prove account-wide deletion. The Gmail preset, known Gmail IMAP hosts, and servers advertising X-GM-EXT-1 are guarded before Deleted/EXPUNGE mutation.
+
+## Saved draft lifecycle
+
+1. Read a saved draft with `mail_query` action `draft` and its exact `reference`. This returns complete supported structured content (To/Cc/Bcc, subject, text/HTML, threading and attachment bytes), `source_digest`, the original Message-ID, and normalization warnings. It does not mark the message read.
+2. To save changes, call `mail_create` action `revise_draft` with that reference, exact lowercase SHA-256 `source_digest`, and `changes`. Only supplied fields are replaced; omitted fields retain the source. Empty strings/lists explicitly clear the corresponding supported fields. `attachments` replaces the entire list, rather than adding to it. Text and HTML alternatives are independent: update or clear both when needed.
+3. A revision appends a **new** draft to the source folder unless an explicit destination `folder` is supplied. It never changes, flags, or deletes the source. Refresh the folder listing/read the new reference before further changes.
+4. To send a reviewed saved version, use `mail_prepare` action `draft` with its reference and digest. The server rereads it, checks the digest, and produces the usual immutable 15-minute preview. Review it before `mail_send_confirmed`; the original draft remains after sending.
+
+```json
+{
+  "action": "revise_draft",
+  "reference": { "folder": "Drafts", "uid_validity": 12345, "uid": 678 },
+  "source_digest": "REPLACE_WITH_DIGEST_RETURNED_BY_DRAFT_READ",
+  "changes": { "subject": "Updated project plan", "text": "Here is the revised plan.", "html": "" }
+}
+```
+
+References and the digest above are placeholders, never values to infer. A stale digest requires a fresh draft read and review; do not automatically retry with a newly observed digest. The digest checks a snapshot, not a lock against another mail client. Later source edits do not change an already prepared message. IMAP APPEND can have an uncertain outcome; inspect the destination before deciding whether to save another copy.
+
+The source must have the Draft flag and not the Deleted flag. Revision and preparation additionally require its From address to match the configured sender; draft reading can inspect a supported draft from another address. Parsing is all-or-error, limited to 5 MiB raw MIME, 1 MiB per body alternative, 20 attachments and 3 MiB total decoded attachment data, and a **1 MiB serialized structured-draft result**. Revised content is checked before APPEND, and the complete draft send preview has the same 1 MiB cap. The JSON limit includes base64 and metadata and is stricter than the parser’s raw/body/attachment limits. An otherwise parseable draft can therefore exceed the response budget and be rejected; no truncated draft is presented as editable.
+
+Supported bodies are plain text, HTML, or an ordered plain-text/HTML alternative, optionally as the first part of a mixed message followed by named file attachments. Unsupported or duplicate headers (including Reply-To, Sender, and custom X-headers), inline/CID/related MIME, signed/encrypted mail, non-UTF-8/ASCII body charsets, and MIME preambles/epilogues are rejected. Ordinary reading may still work; use the original mail app to edit unsupported drafts.
+
+Rebuilding preserves supported authored body content and attachment bytes, not raw MIME. An HTML-only source gains generated plaintext, disclosed in the result; an explicitly empty plaintext alternative is preserved. A source with an explicitly empty HTML alternative is rejected as unsupported instead of silently dropping that part. It normalizes headers, recipient deduplication and newlines, and regenerates sender display formatting, Date, Message-ID, and MIME boundaries. There is no in-place edit, automatic source cleanup, or blanket lossless-edit guarantee.
 
 ## Prepare and send
 
@@ -243,12 +269,13 @@ All preparation and send tools require `mail.send`, `MAIL_ENABLE_SEND=1`, and th
 | `mail_prepare` / `new` | `message` | Persist an immutable message and return its review payload |
 | `mail_prepare` / `reply` | `reference`, `message`, optional `quote_original` | Derive omitted recipients and prepare a threaded reply |
 | `mail_prepare` / `reply_all` | `reference`, `message`, optional `quote_original` | Include visible source participants, excluding configured self addresses |
+| `mail_prepare` / `draft` | `reference`, `source_digest` | Prepare the reviewed saved draft without changing or deleting it |
 | `mail_prepare` / `forward` | `reference`, `message`, optional `original_mode`, `quote_original`, `attachment_indexes` | Prepare a quoted, attached-EML, or original-omitted forward |
 | `mail_send_confirmed` (no action) | `prepared_id`, `confirmed_digest`, `append_sent` | Claim once and send the exact prepared bytes |
 
 ### Composition shape
 
-Place these fields inside `message` for all preparation actions and draft saving.
+Place these fields inside `message` for new/reply/reply-all/forward preparation and new draft saving. Saved-draft preparation instead uses only its exact reference and source digest; it does not accept `message`.
 
 ```json
 {

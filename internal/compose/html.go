@@ -14,7 +14,7 @@ func textAlternative(in Input) (Input, error) {
 	if !validBody(in.Text) || !validBody(in.HTML) {
 		return Input{}, errors.New("text and HTML must be valid UTF-8, without prohibited controls, and at most 1 MiB each")
 	}
-	if in.Text != "" || in.HTML == "" {
+	if in.Text != "" || in.HTML == "" || in.PreserveEmptyText {
 		return in, nil
 	}
 	doc, err := html.Parse(strings.NewReader(in.HTML))

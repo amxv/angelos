@@ -34,16 +34,17 @@ type Attachment struct {
 	DataBase64  string `json:"data_base64" jsonschema:"Base64 bytes; maximum total decoded attachments 3 MiB"`
 }
 type Input struct {
-	To          []string     `json:"to,omitempty"`
-	Cc          []string     `json:"cc,omitempty"`
-	Bcc         []string     `json:"bcc,omitempty"`
-	Subject     string       `json:"subject"`
-	Text        string       `json:"text"`
-	HTML        string       `json:"html,omitempty" jsonschema:"Optional authored HTML alternative; reviewed in full before sending"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	InReplyTo   string       `json:"in_reply_to,omitempty"`
-	References  []string     `json:"references,omitempty"`
-	Warnings    []string     `json:"-"` // Planner notices; never accepted as tool input.
+	To                []string     `json:"to,omitempty"`
+	Cc                []string     `json:"cc,omitempty"`
+	Bcc               []string     `json:"bcc,omitempty"`
+	Subject           string       `json:"subject"`
+	Text              string       `json:"text"`
+	HTML              string       `json:"html,omitempty" jsonschema:"Optional authored HTML alternative; reviewed in full before sending"`
+	Attachments       []Attachment `json:"attachments,omitempty"`
+	InReplyTo         string       `json:"in_reply_to,omitempty"`
+	References        []string     `json:"references,omitempty"`
+	Warnings          []string     `json:"-"` // Planner notices; never accepted as tool input.
+	PreserveEmptyText bool         `json:"-"` // An existing or explicitly cleared draft alternative, not HTML-only authorship.
 }
 type Prepared struct {
 	ID          string              `json:"id"`

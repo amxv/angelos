@@ -13,7 +13,6 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
-const passkeyRPID = "api.angelos.ashray.xyz"
 const maxOwnerCredentials = 8
 
 type ownerRecord struct {
@@ -39,9 +38,9 @@ type passkeyCeremony struct {
 	Data           webauthn.SessionData `json:"webauthn"`
 }
 
-func newPasskeys() (*webauthn.WebAuthn, error) {
+func newPasskeys(c Config) (*webauthn.WebAuthn, error) {
 	return webauthn.New(&webauthn.Config{
-		RPID: passkeyRPID, RPDisplayName: "Angelos", RPOrigins: []string{Issuer},
+		RPID: c.passkeyRPID(), RPDisplayName: "Angelos", RPOrigins: []string{c.Issuer},
 		RPAllowCrossOrigin: false, AttestationPreference: protocol.PreferNoAttestation,
 		AuthenticatorSelection: protocol.AuthenticatorSelection{UserVerification: protocol.VerificationRequired, ResidentKey: protocol.ResidentKeyRequirementPreferred},
 		Timeouts:               webauthn.TimeoutsConfig{Login: webauthn.TimeoutConfig{Enforce: true, Timeout: ceremonyLifetime}, Registration: webauthn.TimeoutConfig{Enforce: true, Timeout: ceremonyLifetime}},
@@ -109,9 +108,9 @@ func (b *Browser) passkeyBegin(w http.ResponseWriter, r *http.Request, register 
 		for _, credential := range owner.Credentials {
 			exclusions = append(exclusions, credential.Descriptor())
 		}
-		options, data, err = b.passkeys.BeginRegistration(owner, webauthn.WithRegistrationOrigin(Issuer), webauthn.WithExclusions(exclusions))
+		options, data, err = b.passkeys.BeginRegistration(owner, webauthn.WithRegistrationOrigin(b.server.config.Issuer), webauthn.WithExclusions(exclusions))
 	} else {
-		options, data, err = b.passkeys.BeginLogin(owner, webauthn.WithLoginOrigin(Issuer), webauthn.WithUserVerification(protocol.VerificationRequired))
+		options, data, err = b.passkeys.BeginLogin(owner, webauthn.WithLoginOrigin(b.server.config.Issuer), webauthn.WithUserVerification(protocol.VerificationRequired))
 	}
 	if err != nil {
 		browserError(w, 503, "Unable to begin passkey ceremony.")
@@ -174,7 +173,7 @@ func (b *Browser) passkeyFinish(w http.ResponseWriter, r *http.Request, register
 	if register {
 		mode = "register"
 	}
-	if json.Unmarshal(raw, &ceremony) != nil || ceremony.Version != 1 || ceremony.Mode != mode || !equalSecret(ceremony.SessionBinding, browserHash(token)) || b.server.now().Unix() >= ceremony.ExpiresUnix || ceremony.Data.RelyingPartyID != passkeyRPID || ceremony.Data.Origin != Issuer || ceremony.Data.UserVerification != protocol.VerificationRequired {
+	if json.Unmarshal(raw, &ceremony) != nil || ceremony.Version != 1 || ceremony.Mode != mode || !equalSecret(ceremony.SessionBinding, browserHash(token)) || b.server.now().Unix() >= ceremony.ExpiresUnix || ceremony.Data.RelyingPartyID != b.server.config.passkeyRPID() || ceremony.Data.Origin != b.server.config.Issuer || ceremony.Data.UserVerification != protocol.VerificationRequired {
 		browserError(w, 400, "Invalid passkey ceremony.")
 		return
 	}
@@ -200,7 +199,7 @@ func (b *Browser) passkeyFinish(w http.ResponseWriter, r *http.Request, register
 			return
 		}
 		parsed, parseErr := protocol.ParseCredentialCreationResponseBytes(input.Credential)
-		if parseErr != nil || parsed.Response.CollectedClientData.Origin != Issuer {
+		if parseErr != nil || parsed.Response.CollectedClientData.Origin != b.server.config.Issuer {
 			browserError(w, 400, "Passkey verification failed.")
 			return
 		}
@@ -218,7 +217,7 @@ func (b *Browser) passkeyFinish(w http.ResponseWriter, r *http.Request, register
 		}
 	} else {
 		parsed, parseErr := protocol.ParseCredentialRequestResponseBytes(input.Credential)
-		if parseErr != nil || parsed.Response.CollectedClientData.Origin != Issuer {
+		if parseErr != nil || parsed.Response.CollectedClientData.Origin != b.server.config.Issuer {
 			browserError(w, 400, "Passkey verification failed.")
 			return
 		}

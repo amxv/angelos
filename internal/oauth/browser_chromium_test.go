@@ -17,18 +17,25 @@ func TestBrowserChromiumVirtualAuthenticator(t *testing.T) {
 	if os.Getenv("ANGELOS_BROWSER_TEST") != "1" {
 		t.Skip("set ANGELOS_BROWSER_TEST=1 with Playwright and Chromium installed")
 	}
-	h := newBrowserHarness(t)
+	for _, issuer := range deploymentIssuers {
+		t.Run(issuer, func(t *testing.T) { testBrowserChromiumAtIssuer(t, issuer) })
+	}
+}
+func testBrowserChromiumAtIssuer(t *testing.T, issuer string) {
+	config := coreTestConfig(t)
+	config.Issuer, config.Resource = issuer, issuer+"/mcp"
+	h := newBrowserHarnessWithConfig(t, config)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Host = passkeyRPID
+		r.Host = config.passkeyRPID()
 		h.browser.server.Handler().ServeHTTP(w, r)
 	}))
 	defer server.Close()
 	verifier, _ := browserRandom()
 	digest := sha256.Sum256([]byte(verifier))
 	c := h.browser.server.config.Clients[0]
-	path := "/oauth/authorize?" + url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "resource": {Resource}, "state": {"browser-js-state"}, "scope": {"mail.read mail.write mail.send"}, "code_challenge": {b64(digest[:])}, "code_challenge_method": {"S256"}}.Encode()
+	path := "/oauth/authorize?" + url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "resource": {config.Resource}, "state": {"browser-js-state"}, "scope": {"mail.read mail.write mail.send"}, "code_challenge": {b64(digest[:])}, "code_challenge_method": {"S256"}}.Encode()
 	cmd := exec.Command("node", "testdata/browser-passkeys.cjs")
-	cmd.Env = append(os.Environ(), "BROWSER_FIXTURE_URL="+server.URL, "BROWSER_AUTHORIZE_PATH="+path, "BROWSER_BOOTSTRAP="+h.bootstrap)
+	cmd.Env = append(os.Environ(), "BROWSER_FIXTURE_URL="+server.URL, "BROWSER_ISSUER="+issuer, "BROWSER_AUTHORIZE_PATH="+path, "BROWSER_BOOTSTRAP="+h.bootstrap)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Chromium contract test: %v\n%s", err, output)

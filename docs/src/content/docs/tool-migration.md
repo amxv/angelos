@@ -1,14 +1,14 @@
 ---
 title: Migration and token budget
 description: Upgrade existing MCP clients to the compact six-tool interface without losing operations or safety information.
-summary: Six tools now cover 22 operations, with compact message results and read-only inbox workflows.
+summary: Six tools now cover 25 operations, with compact message results and read-only inbox workflows.
 order: 45
 category: Reference
 ---
 
 New integrations can start with the [agent guide](/docs/agent-guide); this page is for upgrading existing clients and measuring their discovery cost.
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, **0.6.0**, and **0.7.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, **0.6.0**, **0.7.0**, and **0.8.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
 
 ## Operation parity
 
@@ -106,7 +106,7 @@ See [Reply and forward details](/docs/natural-messages) for exact behavior and p
 
 Refresh discovery for `mail_query` action `send_status` (`prepared_id`), and optional search `message_id`/`participant` filters. There are six tools and 19 operations. Default searches and their existing cursor serialization are preserved; new filter values bind their cursors. Exact-ID search verifies complete case-preserved headers, while participant search is explicitly a substring operator across visible address fields.
 
-Send-status inspection is read-only, requires `mail.read` plus `mail.send`, and works with a valid store even when sends are disabled. New records bind ownership to the verified issuer/resource/subject. Older unowned receipts remain unavailable to this new lookup; their existing exact-ID/digest send behavior and TTLs are unchanged. See the [receipt reference](/docs/tools#inspect-a-send-receipt-without-sending) and [ownership model](/docs/authentication#preparation-ownership).
+Send-status inspection is read-only, requires `mail.read` plus `mail.send`, and works with a valid store even when sends are disabled. New records bind ownership to the verified issuer/resource/subject. Older unowned receipts remain unavailable to this new lookup; their existing exact-ID/digest send behavior and TTLs are unchanged. See the [receipt reference](/docs/tools#inspect-a-send-receipt-without-sending) and [ownership model](/docs/oauth-reference#preparation-ownership).
 
 
 ## Version 0.5 Gmail/Workspace compatibility
@@ -145,8 +145,22 @@ The five-selected-message signed MCP fixture reduces read calls from five to one
 
 ## First-party OAuth and ChatGPT discovery
 
-The optional [built-in OAuth issuer](/docs/first-party-oauth) does not rename the six tools or change their 22 operation routes. `tools/list` now returns identical `securitySchemes` at the top level and in the legacy `_meta` mirror, as required by current [ChatGPT authentication guidance](https://developers.openai.com/plugins/build/auth). Authentication errors retain the `mcp/www_authenticate` challenge. Scopes, deployment gates, tool annotations, and individual send/deletion confirmation boundaries remain unchanged.
+The optional [built-in OAuth issuer](/docs/oauth-reference) does not rename the six tools or change their 22 operation routes. `tools/list` now returns identical `securitySchemes` at the top level and in the legacy `_meta` mirror, as required by current [ChatGPT authentication guidance](https://developers.openai.com/plugins/build/auth). Authentication errors retain the `mcp/www_authenticate` challenge. Scopes, deployment gates, tool annotations, and individual send/deletion confirmation boundaries remain unchanged.
 
-The duplication adds 429 bytes to the deterministic discovery fixture: complete tool-definition JSON is 10,770 bytes against the same 14,886-byte original baseline. These are compact JSON measurements, not tokenizer counts. The regression test retains the 70% ceiling for structural definitions and permits at most 512 extra bytes only for the top-level OAuth metadata mirror; it reports the full wire size separately. Re-run `TestToolSchemaTokenBudget` on the exact commit, and do not treat the historical version tables above as current measurements.
+The duplication adds 429 bytes to the deterministic discovery fixture: complete tool-definition JSON is 10,770 bytes against the same 14,886-byte original baseline. These are compact JSON measurements, not tokenizer counts. For that release, the regression test retained the 70% structural ceiling and permitted at most 512 extra bytes for the top-level OAuth metadata mirror; version 0.8 adds the bounded draft allowance below. Re-run `TestToolSchemaTokenBudget` on the exact commit, and do not treat the historical version tables above as current measurements.
 
-Deploying the OAuth implementation does not switch an existing issuer, enroll the owner, or verify a live ChatGPT connection. Changing issuer/resource/subject affects the owner binding of existing preparations and receipts; follow the [issuer migration procedure](/docs/first-party-oauth#migrate-from-an-external-issuer).
+Deploying the OAuth implementation does not switch an existing issuer, enroll the owner, or verify a live ChatGPT connection. Changing issuer/resource/subject affects the owner binding of existing preparations and receipts; follow the [issuer migration procedure](/docs/oauth-reference#migrate-from-an-external-issuer).
+
+## Version 0.8: structured saved drafts
+
+Three additive actions retain the same six risk-separated tool names and scopes:
+
+- `mail_query` / `draft`: exact reference → complete supported draft plus source digest.
+- `mail_create` / `revise_draft`: exact reference, digest, explicit changes → new saved revision; original preserved.
+- `mail_prepare` / `draft`: exact reference and digest → immutable reviewed send preparation, with no source cleanup.
+
+Refresh the client’s tool schema after deployment. Never reconstruct an editable draft from ordinary summary/read output, substitute an inferred digest, or retry a digest conflict without rereading and reviewing. `changes` retains omitted fields, clears explicitly empty supported fields, and replaces the entire attachment list. Existing new-draft creation is unchanged. See [Saved draft lifecycle](/docs/tools#saved-draft-lifecycle) for the strict MIME subset and normalization boundaries.
+
+### Version 0.8 discovery measurement
+
+The final deterministic fixture measures 11,004 structural JSON bytes, compared with 10,341 before the draft actions, plus 429 bytes for the OAuth metadata mirror: **11,433 complete wire bytes**. The original 17-tool fixture remains unchanged at 14,886 bytes. The structural regression budget is 70% of that baseline plus a separately bounded 768-byte draft allowance; the OAuth mirror retains its independent 512-byte ceiling. This is compact JSON size, not a tokenizer measurement, and does not claim the current complete schema is below 70% of the baseline.

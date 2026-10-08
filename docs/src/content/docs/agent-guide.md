@@ -6,7 +6,7 @@ order: 12
 category: Use your inbox
 ---
 
-Angelos 0.7.0 exposes six MCP tools and 22 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
+Angelos 0.8.0 exposes six MCP tools and 25 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
 
 ## 1. Discover capabilities and permissions
 
@@ -24,14 +24,14 @@ Discovery does not mean an operation is enabled. Every call requires an owner to
 
 | Tool | Operations | Additional requirements |
 | --- | --- | --- |
-| `mail_query` | `capabilities`, `folders`, `search`, `triage`, `conversation`, `read`, `attachment`, `send_status` | Status alone also needs `mail.send` and the durable store |
-| `mail_create` | `folder`, `copy`, `draft` | `mail.write`, enabled writes |
+| `mail_query` | `capabilities`, `folders`, `search`, `triage`, `conversation`, `read`, `read_many`, `draft`, `attachment`, `send_status` | Status alone also needs `mail.send` and the durable store |
+| `mail_create` | `folder`, `copy`, `draft`, `revise_draft` | `mail.write`, enabled writes |
 | `mail_modify` | `flags`, `rename`, `move`, `trash` | `mail.write`, enabled writes |
 | `mail_delete_permanently` | One exact-message delete; no `action` field | `mail.write`, enabled writes and deletion, targeted expunge support, per-action confirmation; unavailable on Gmail |
-| `mail_prepare` | `new`, `reply`, `reply_all`, `forward` | `mail.send`, enabled sending, durable Redis store |
+| `mail_prepare` | `new`, `reply`, `reply_all`, `forward`, `draft` | `mail.send`, enabled sending, durable Redis store |
 | `mail_send_confirmed` | One prepared-message dispatch; no `action` field | Same send requirements and approval of the exact preparation |
 
-Send-status inspection works with sending disabled when its scope and store requirements remain satisfied. Authentication of MCP clients is separate from mailbox login. See [Authentication](/docs/authentication).
+Send-status inspection works with sending disabled when its scope and store requirements remain satisfied. Authentication of MCP clients is separate from mailbox login. See [Authentication](/docs/oauth-reference#external-issuer-requirements).
 
 ## 2. Search, then read
 
@@ -111,7 +111,7 @@ Use an observed MODSEQ for `unchanged_since`; it requires CONDSTORE. Without tha
 
 Moves require native MOVE; Trash requires a uniquely advertised Trash folder. Refresh references afterward. An accepted copy/move without destination UID mapping needs destination verification before another action. Never blindly retry an uncertain mutation.
 
-`mail_create` with `action: "draft"` and `message` appends a new draft. It does not update an existing one, and read output cannot losslessly reconstruct saved MIME. Permanent deletion takes `folder`, `uid_validity`, and `uid` directly, without an `action` or nested `reference`. See [mailbox writes](/docs/tools#mailbox-writes).
+`mail_create` with `action: "draft"` and `message` appends a new draft. For an existing draft, use `mail_query` action `draft` to obtain the supported complete structure and `source_digest`; ordinary read output is not an editable reconstruction. Use `mail_create` action `revise_draft` with explicit `changes` to append a revised copy, or `mail_prepare` action `draft` to prepare that exact snapshot for review. Preserve the original, reread after digest conflicts, and never silently drop unsupported MIME. See [the draft lifecycle](/docs/tools#saved-draft-lifecycle). Permanent deletion takes `folder`, `uid_validity`, and `uid` directly, without an `action` or nested `reference`. See [mailbox writes](/docs/tools#mailbox-writes).
 
 ## 5. Prepare, review, then dispatch
 

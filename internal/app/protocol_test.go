@@ -53,11 +53,11 @@ func TestActualToolRegistryAndAnnotations(t *testing.T) {
 		read, destructive, open bool
 		actions                 []string
 	}{
-		"mail_query":              {"mail.read", true, false, false, []string{"attachment", "capabilities", "conversation", "folders", "read", "read_many", "search", "send_status", "triage"}},
-		"mail_create":             {"mail.write", false, false, false, []string{"copy", "draft", "folder"}},
+		"mail_query":              {"mail.read", true, false, false, []string{"attachment", "capabilities", "conversation", "draft", "folders", "read", "read_many", "search", "send_status", "triage"}},
+		"mail_create":             {"mail.write", false, false, false, []string{"copy", "draft", "folder", "revise_draft"}},
 		"mail_modify":             {"mail.write", false, true, false, []string{"flags", "move", "rename", "trash"}},
 		"mail_delete_permanently": {"mail.write", false, true, false, nil},
-		"mail_prepare":            {"mail.send", false, false, false, []string{"forward", "new", "reply", "reply_all"}},
+		"mail_prepare":            {"mail.send", false, false, false, []string{"draft", "forward", "new", "reply", "reply_all"}},
 		"mail_send_confirmed":     {"mail.send", false, true, true, nil},
 	}
 	if len(listed) != len(expected) {
@@ -124,8 +124,13 @@ func TestToolSchemaTokenBudget(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(withoutMirror)*100 > len(baseline)*70 || len(current)-len(withoutMirror) > 512 {
-		t.Fatalf("discovery exceeds 70%% structural budget or 512-byte OAuth compatibility allowance: wire=%d structural=%d baseline=%d", len(current), len(withoutMirror), len(baseline))
+	// 0.8 adds three bounded draft actions and a shared message/changes $defs.
+	// Structural bytes: 10,341 (0.7) -> 11,004; complete wire: 11,433.
+	// Preserve the old compression ceiling plus a fixed 768-byte lifecycle
+	// allowance; never change the original 17-tool baseline to fit growth.
+	const draftLifecycleAllowance = 768
+	if (len(withoutMirror)-draftLifecycleAllowance)*100 > len(baseline)*70 || len(current)-len(withoutMirror) > 512 {
+		t.Fatalf("discovery exceeds historic 70%% + 768-byte draft budget or 512-byte OAuth compatibility allowance: wire=%d structural=%d baseline=%d", len(current), len(withoutMirror), len(baseline))
 	}
 	countSchemas := func(raw []byte) (int, int) {
 		var ts []map[string]json.RawMessage
@@ -152,5 +157,29 @@ func TestMissingScopeReturnsChallengeWithoutBackend(t *testing.T) {
 	meta, ok := r["_meta"].(map[string]any)
 	if !ok || meta["mcp/www_authenticate"] == nil {
 		t.Fatal("missing OAuth challenge", out)
+	}
+}
+
+// Keep a complete release snapshot in addition to the historical compression
+// budget. Updating it is intentional: UPDATE_TOOL_SNAPSHOT=1 go test -run
+// TestToolSchemaReleaseSnapshot ./internal/app (with the configured toolchain).
+func TestToolSchemaReleaseSnapshot(t *testing.T) {
+	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
+	data, err := json.Marshal(out["result"].(map[string]any)["tools"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "testdata/tools-list-v0.8.0.json"
+	if os.Getenv("UPDATE_TOOL_SNAPSHOT") == "1" {
+		if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(want), data) {
+		t.Fatal("tool schema changed; review and intentionally update the 0.8.0 snapshot")
 	}
 }

@@ -42,6 +42,8 @@ func classifyToolError(err error) (code, recovery, action string) {
 		return "invalid_arguments", "Correct the request using tools/list and valid exact references before submitting a new request.", "correct_input"
 	case errors.Is(err, mail.ErrStaleReference):
 		return "stale_reference", "Search the mailbox again and use its current folder, UIDVALIDITY and UID; discard old cursors and references.", "refresh_reference"
+	case errors.Is(err, mail.ErrDraftChanged):
+		return "conflict", "Read the complete draft again and review its new source_digest before revising or preparing. The original was not changed by this operation.", "refresh_reference"
 	case errors.Is(err, mail.ErrConflict):
 		return "conflict", "Read the message again and review current flags and MODSEQ before deciding whether to submit a new change.", "refresh_reference"
 	case errors.Is(err, mail.ErrNotFound):

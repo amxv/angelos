@@ -19,6 +19,8 @@ import (
 )
 
 const (
+	// Legacy deployment identifiers, retained for compatibility and fixtures.
+	// Runtime authority comes only from the explicitly configured issuer.
 	Issuer       = "https://api.angelos.ashray.xyz"
 	Resource     = Issuer + "/mcp"
 	MetadataPath = "/.well-known/oauth-authorization-server"
@@ -33,7 +35,8 @@ const (
 
 var ErrDisabled = errors.New("first-party OAuth is disabled")
 
-// Config deliberately has no dynamic issuer or development authentication mode.
+// Config binds a deployment to one explicitly trusted public HTTPS origin.
+// No origin is inferred from requests, proxy headers, or Vercel preview variables.
 // HTTPClient is a trusted test seam; production uses a public-address-only client.
 type Config struct {
 	Enabled             bool
@@ -65,8 +68,8 @@ func ConfigFromEnv() (Config, error) {
 		BootstrapTokenHash: os.Getenv("ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH"),
 		EnableChatGPTCIMD:  os.Getenv("ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED") == "1",
 	}
-	if os.Getenv("MCP_OAUTH_JWKS_URL") != Issuer+JWKSPath {
-		return Config{}, errors.New("MCP_OAUTH_JWKS_URL must be the canonical first-party JWKS URL")
+	if os.Getenv("MCP_OAUTH_JWKS_URL") != c.Issuer+JWKSPath {
+		return Config{}, errors.New("MCP_OAUTH_JWKS_URL must exactly equal MCP_OAUTH_ISSUER + /oauth/jwks.json")
 	}
 	if value := os.Getenv("ANGELOS_OAUTH_CLIENTS_JSON"); value != "" {
 		if len(value) > 32768 || strictJSON([]byte(value), &c.Clients) != nil {
@@ -88,8 +91,11 @@ func (c Config) validate() error {
 	if !c.Enabled {
 		return ErrDisabled
 	}
-	if c.Issuer != Issuer || c.Resource != Resource {
-		return errors.New("first-party issuer and MCP resource must match the canonical production URLs")
+	if _, err := issuerHost(c.Issuer); err != nil {
+		return err
+	}
+	if c.Resource != c.Issuer+"/mcp" {
+		return errors.New("MCP_RESOURCE_URL must exactly equal MCP_OAUTH_ISSUER + /mcp")
 	}
 	if !boundedText(c.OwnerSubject, 512) || strings.Contains(c.OwnerSubject, ",") {
 		return errors.New("MCP_ALLOWED_SUBJECTS must contain exactly one explicit owner subject")
@@ -129,6 +135,23 @@ func (c Config) validate() error {
 		seen[client.ID] = true
 	}
 	return nil
+}
+
+// issuerHost accepts one unambiguous HTTPS origin, never a URL prefix or a
+// development address. Requiring exact lowercase spelling and no explicit port
+// keeps browser origins, WebAuthn RP IDs, JWT claims, and host guards identical.
+func issuerHost(issuer string) (string, error) {
+	u, err := url.Parse(issuer)
+	if err != nil || !validRedirect(issuer) || u.Path != "" || u.RawQuery != "" || strings.ContainsAny(issuer, "?#") || u.Port() != "" || u.Host != strings.ToLower(u.Host) || issuer != "https://"+u.Host {
+		return "", errors.New("MCP_OAUTH_ISSUER must be an exact lowercase public HTTPS origin without a port, path, query, or fragment")
+	}
+	return u.Host, nil
+}
+
+func (c Config) passkeyRPID() string {
+	// Config validation precedes all WebAuthn initialization and ceremonies.
+	host, _ := issuerHost(c.Issuer)
+	return host
 }
 
 func boundedText(value string, max int) bool {
