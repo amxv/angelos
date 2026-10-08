@@ -32,6 +32,9 @@ type Config struct {
 	Issuer          string
 	JWKSURL         string
 	AllowedSubjects []string
+	// InitialScopes controls only the scopes requested on a new 401 sign-in.
+	// Empty preserves the read-only default. It never adds scopes to a token.
+	InitialScopes []string
 	// HTTPClient is an optional trusted test transport. Leave nil in production
 	// to use the public-IP-only transport. Redirects and timeouts remain bounded.
 	HTTPClient *http.Client
@@ -56,8 +59,20 @@ func ConfigFromEnv() (Config, error) {
 			c.AllowedSubjects = append(c.AllowedSubjects, subject)
 		}
 	}
+	if value := os.Getenv("MCP_OAUTH_INITIAL_SCOPES"); value != "" {
+		c.InitialScopes = strings.Split(value, " ")
+	}
 	if err := c.validate(); err != nil {
 		return Config{}, err
+	}
+	// A deployment can request only capabilities its explicit server gates
+	// enable. Disabling a gate also narrows subsequent connection requests.
+	requested := initialScopes(c.InitialScopes)
+	c.InitialScopes = []string{ScopeRead}
+	for _, scope := range requested[1:] {
+		if scope == ScopeWrite && os.Getenv("MAIL_ENABLE_WRITES") == "1" || scope == ScopeSend && os.Getenv("MAIL_ENABLE_SEND") == "1" {
+			c.InitialScopes = append(c.InitialScopes, scope)
+		}
 	}
 	return c, nil
 }
@@ -85,7 +100,33 @@ func (c Config) validate() error {
 			return errors.New("MCP_ALLOWED_SUBJECTS contains an invalid subject identifier")
 		}
 	}
+	if len(c.InitialScopes) > 3 {
+		return errors.New("MCP_OAUTH_INITIAL_SCOPES must contain mail.read and optional mail.write and mail.send")
+	}
+	seen := map[string]bool{}
+	for _, scope := range c.InitialScopes {
+		if seen[scope] || (scope != ScopeRead && scope != ScopeWrite && scope != ScopeSend) {
+			return errors.New("MCP_OAUTH_INITIAL_SCOPES contains an invalid or duplicate scope")
+		}
+		seen[scope] = true
+	}
+	if len(c.InitialScopes) > 0 && !seen[ScopeRead] {
+		return errors.New("MCP_OAUTH_INITIAL_SCOPES must include mail.read")
+	}
 	return nil
+}
+
+// initialScopes returns a fresh canonical list after configuration validation.
+func initialScopes(scopes []string) []string {
+	result := []string{ScopeRead}
+	for _, wanted := range []string{ScopeWrite, ScopeSend} {
+		for _, scope := range scopes {
+			if scope == wanted {
+				result = append(result, wanted)
+			}
+		}
+	}
+	return result
 }
 
 func validSubject(s string) bool {

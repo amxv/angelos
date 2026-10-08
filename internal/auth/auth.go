@@ -98,6 +98,7 @@ func New(c Config) (*Authenticator, error) {
 		return nil, err
 	}
 	c.AllowedSubjects = append([]string(nil), c.AllowedSubjects...)
+	c.InitialScopes = initialScopes(c.InitialScopes)
 	c.LocalJWKS = append([]byte(nil), c.LocalJWKS...)
 	if c.LocalJWKS != nil {
 		if len(c.LocalJWKS) > maxJWKSBytes {
@@ -205,6 +206,9 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 
 func (a *Authenticator) reject(w http.ResponseWriter, status int, code string) {
 	challenge := a.Challenge(ScopeRead)
+	if status == http.StatusUnauthorized {
+		challenge = `Bearer resource_metadata="` + a.metadataURL + `", scope="` + strings.Join(a.config.InitialScopes, " ") + `"`
+	}
 	if code != "" {
 		challenge += `, error="` + code + `"`
 	}
