@@ -133,9 +133,15 @@ func clearBrowserCookie(w http.ResponseWriter) {
 func (b *Browser) ensureSession(w http.ResponseWriter, r *http.Request) (string, *browserSession, error) {
 	token, session, err := b.session(r)
 	if err == nil {
-		return token, session, nil
+		err = b.allowSession(r.Context(), token)
+		return token, session, err
 	}
 	if !errors.Is(err, ErrNotFound) {
+		return "", nil, err
+	}
+	// Only creating fresh anonymous state spends the shared abuse budget.
+	// An existing, validated session has its own budget even before sign-in.
+	if err = allowRate(r.Context(), b.server.store, "browser:new-session", anonymousSessionLimit); err != nil {
 		return "", nil, err
 	}
 	token, session, err = b.newSession(r.Context(), "", "")
@@ -208,6 +214,10 @@ func (b *Browser) requireSession(w http.ResponseWriter, r *http.Request, authent
 	}
 	if authenticated && session.Subject != b.server.config.OwnerSubject {
 		browserError(w, http.StatusUnauthorized, "Sign in again.")
+		return "", nil, false
+	}
+	if err := b.allowSession(r.Context(), token); err != nil {
+		browserStateError(w, err)
 		return "", nil, false
 	}
 	return token, session, true

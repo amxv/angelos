@@ -71,7 +71,7 @@ func (b *Browser) passkeyBegin(w http.ResponseWriter, r *http.Request, register 
 	if !browserJSON(w, r, &input) {
 		return
 	}
-	if !b.rate(w, r, "passkey-begin", 20, time.Minute) {
+	if !b.rate(w, r, "passkey-begin:"+token, 20, time.Minute) {
 		return
 	}
 	_, owner, err := b.loadOwner(r)
@@ -145,7 +145,7 @@ func (b *Browser) passkeyFinish(w http.ResponseWriter, r *http.Request, register
 	if !b.csrf(w, r, session, r.Header.Get("X-CSRF-Token")) {
 		return
 	}
-	if !b.rate(w, r, "passkey-finish", 30, time.Minute) {
+	if !b.rate(w, r, "passkey-finish:"+token, 30, time.Minute) {
 		return
 	}
 	var input struct {

@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -154,17 +155,11 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_client")
 		return
 	}
-	allowed, err := s.store.Allow(r.Context(), "authorize:"+params.Get("client_id"), 60, time.Minute)
-	if err != nil {
-		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
-		return
-	}
-	if !allowed {
-		w.Header().Set("Retry-After", "60")
-		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable")
-		return
-	}
 	client, err := s.resolveClient(r.Context(), params.Get("client_id"))
+	if errors.Is(err, ErrUnavailable) || errors.Is(err, ErrRateLimited) {
+		tokenStateError(w, err)
+		return
+	}
 	if err != nil || !client.allowsRedirect(params.Get("redirect_uri")) {
 		oauthError(w, http.StatusBadRequest, "invalid_client")
 		return
@@ -309,17 +304,7 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_target")
 		return
 	}
-	allowed, err := s.store.Allow(r.Context(), "token:"+params.Get("client_id"), 120, time.Minute)
-	if err != nil {
-		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
-		return
-	}
-	if !allowed {
-		w.Header().Set("Retry-After", "60")
-		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable")
-		return
-	}
-	client, err := s.resolveClient(r.Context(), params.Get("client_id"))
+	client, err := s.tokenClient(params.Get("client_id"))
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_client")
 		return
@@ -339,7 +324,9 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, p url.Valu
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
-	data, err := s.store.Consume(r.Context(), "code", p.Get("code"))
+	// A public client ID proves nothing. Validate the unpredictable code and
+	// PKCE before spending a grant's quota or consuming the one-time code.
+	data, err := s.store.Get(r.Context(), "code", p.Get("code"))
 	if err != nil {
 		tokenStateError(w, err)
 		return
@@ -359,6 +346,21 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, p url.Valu
 		return
 	}
 	if grant.ID != code.GrantID || grant.Subject != code.Subject || grant.ClientID != client.ID || grant.Resource != s.config.Resource || grant.ExpiresUnix <= s.now().Unix() || !scopeSubset(code.Scopes, grant.Scopes) {
+		oauthError(w, http.StatusBadRequest, "invalid_grant")
+		return
+	}
+	if err := allowRate(r.Context(), s.store, tokenRateBucket(grant.ID), tokenGrantLimit); err != nil {
+		tokenStateError(w, err)
+		return
+	}
+	consumed, err := s.store.Consume(r.Context(), "code", p.Get("code"))
+	if err != nil {
+		tokenStateError(w, err)
+		return
+	}
+	// Codes are immutable NX records. Only the identical, atomically consumed
+	// record may issue tokens; a racing exchange still has exactly one winner.
+	if !bytes.Equal(data, consumed) || code.ExpiresUnix <= s.now().Unix() {
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
@@ -475,6 +477,11 @@ func oauthError(w http.ResponseWriter, status int, code string) {
 }
 
 func tokenStateError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrRateLimited) {
+		w.Header().Set("Retry-After", "60")
+		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable")
+		return
+	}
 	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrReplay) || errors.Is(err, ErrConflict) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant")
 		return

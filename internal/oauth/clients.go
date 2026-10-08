@@ -59,6 +59,22 @@ func (s *Server) knownClient(id string) bool {
 	return s.config.EnableChatGPTCIMD && id == ChatGPTClientID
 }
 
+// Token redemption relies on the immutable client binding established by a
+// validated authorization and owner consent. It does not re-fetch a public
+// metadata URL before proving a code/refresh token. The configured allowlist is
+// still authoritative: disabling a client prevents further redemption.
+func (s *Server) tokenClient(id string) (Client, error) {
+	for _, client := range s.config.Clients {
+		if client.ID == id {
+			return client, nil
+		}
+	}
+	if s.config.EnableChatGPTCIMD && id == ChatGPTClientID {
+		return Client{ID: ChatGPTClientID, Name: "ChatGPT", RedirectURIs: []string{ChatGPTRedirectURI}}, nil
+	}
+	return Client{}, errors.New("unknown OAuth client")
+}
+
 func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 	for _, c := range s.config.Clients {
 		if id == c.ID {
@@ -77,6 +93,11 @@ func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 	}
 	if s.now().Before(s.clientRetryAfter) {
 		return Client{}, errors.New("client metadata temporarily unavailable")
+	}
+	// Bound outbound work across stateless instances, not requests by public
+	// client ID. A fresh cached document never spends this shared fetch budget.
+	if err := allowRate(ctx, s.store, "client-metadata:fetch", 12); err != nil {
+		return Client{}, err
 	}
 	success := false
 	defer func() {

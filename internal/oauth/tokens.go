@@ -142,9 +142,10 @@ func (s *Server) signAccess(grant Grant, scopes []string) (string, error) {
 
 // GrantActive is called only after the resource server verifies the JWT's
 // signature and claims. It deliberately performs a durable check on each use.
-// Revocation and refresh replay therefore invalidate existing access tokens too.
+// Revocation, refresh replay, and disabling a configured client therefore
+// invalidate existing access tokens too. Metadata uptime is not an access gate.
 func (s *Server) GrantActive(ctx context.Context, grantID, clientID, subject string, scopes []string) error {
-	if !validOpaque(grantID) || subject != s.config.OwnerSubject || !boundedText(clientID, 512) {
+	if !validOpaque(grantID) || subject != s.config.OwnerSubject || !boundedText(clientID, 512) || !s.knownClient(clientID) {
 		return ErrNotFound
 	}
 	if _, err := canonicalScopes(scopes); err != nil {

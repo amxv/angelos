@@ -125,9 +125,6 @@ func (b *Browser) Handler() http.Handler {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-		if !b.rate(w, r, "requests", 180, time.Minute) {
-			return
-		}
 		switch {
 		case r.URL.Path == "/oauth/login" && r.Method == http.MethodGet:
 			b.loginPage(w, r)
@@ -180,7 +177,7 @@ func (b *Browser) render(w http.ResponseWriter, page browserPage) {
 func (b *Browser) loginPage(w http.ResponseWriter, r *http.Request) {
 	_, session, err := b.ensureSession(w, r)
 	if err != nil {
-		browserError(w, 503, "Authentication state unavailable.")
+		browserStateError(w, err)
 		return
 	}
 	_, owner, err := b.loadOwner(r)
@@ -194,7 +191,10 @@ func (b *Browser) BeginAuthorization(w http.ResponseWriter, r *http.Request, req
 	browserHeaders(w)
 	token, session, err := b.ensureSession(w, r)
 	if err != nil {
-		browserError(w, 503, "Authentication state unavailable.")
+		browserStateError(w, err)
+		return
+	}
+	if !b.rate(w, r, "authorize:"+token, authorizationSessionLimit, time.Minute) {
 		return
 	}
 	id, err := browserRandom()

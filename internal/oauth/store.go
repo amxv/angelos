@@ -16,6 +16,7 @@ var (
 	ErrConflict    = errors.New("OAuth state already exists or changed")
 	ErrReplay      = errors.New("refresh token replay; grant revoked")
 	ErrUnavailable = errors.New("OAuth state unavailable")
+	ErrRateLimited = errors.New("OAuth rate limit reached")
 )
 
 // Store persists the state shared by every stateless authorization-server instance.
@@ -261,7 +262,12 @@ func (s *RedisStore) CASOwner(ctx context.Context, old, next []byte) (bool, erro
 	return s.boolCommand(ctx, "EVAL", ownerCASScript, 1, s.prefix+"owner", string(old), string(next))
 }
 
-const rateScript = `local n=redis.call('GET',KEYS[1]); if n and tonumber(n)>=tonumber(ARGV[1]) then return 0 end; local count=redis.call('INCR',KEYS[1]); if count==1 then redis.call('EXPIRE',KEYS[1],ARGV[2]) end; return 1`
+// Existing counters must have a valid count and expiry. Corrupt durable state
+// fails closed rather than silently resetting a quota or creating a permanent
+// lockout counter. Denied attempts do not extend the window.
+const rateLimitLua = `local function allow_rate(key,limit,window) local n=redis.call('GET',key); if n then local count=tonumber(n); if not count or count<1 or count%1~=0 or redis.call('TTL',key)<0 then error('invalid rate state') end; if count>=limit then return false end end; local count=redis.call('INCR',key); if count==1 then redis.call('EXPIRE',key,window) end; return true end
+`
+const rateScript = rateLimitLua + `if allow_rate(KEYS[1],tonumber(ARGV[1]),tonumber(ARGV[2])) then return 1 else return 0 end`
 
 func (s *RedisStore) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (bool, error) {
 	k, e := s.stateKey("rate", bucket)
@@ -437,7 +443,7 @@ func (s *RedisStore) CreateRefresh(ctx context.Context, token string, r Refresh)
 
 // Every consumed hash remains as a spent tombstone until the original family
 // deadline. Replay revokes both family and grant in the same Redis operation.
-const rotateRefreshScript = refreshBindingLua + `local raw=redis.call('GET',KEYS[1]); if not raw then return {'missing',''} end; local r=cjson.decode(raw); local now=tonumber(ARGV[1]); if r.refresh.client_id~=ARGV[2] or r.refresh.resource~=ARGV[3] or r.refresh.subject~=ARGV[4] or r.refresh.expires_unix<=now then return {'missing',''} end; if r.family_hash~=ARGV[5] then return {'missing',''} end; local fkey=KEYS[4]; local fraw=redis.call('GET',fkey); if not fraw then return {'missing',''} end; local f=cjson.decode(fraw); if not bound(r.refresh,f.refresh) or r.refresh.family_id~=f.refresh.family_id or r.refresh.grant_id~=f.refresh.grant_id or r.refresh.expires_unix~=f.refresh.expires_unix then return {'missing',''} end; if r.status=='spent' then f.status='revoked'; redis.call('SET',fkey,cjson.encode(f),'EX',r.refresh.expires_unix-now); redis.call('HDEL',KEYS[3],r.grant_hash); return {'replay',''} end; if r.status~='active' or f.status~='active' then return {'missing',''} end; local graw=redis.call('HGET',KEYS[3],r.grant_hash); if not graw then return {'missing',''} end; local g=cjson.decode(graw); if not bound(r.refresh,g) or r.refresh.grant_id~=g.id or g.expires_unix<r.refresh.expires_unix or g.expires_unix<=now then return {'missing',''} end; if redis.call('EXISTS',KEYS[2])==1 then return {'conflict',''} end; if f.rotations>=tonumber(ARGV[6]) then f.status='revoked'; redis.call('SET',fkey,cjson.encode(f),'EX',r.refresh.expires_unix-now); redis.call('HDEL',KEYS[3],r.grant_hash); return {'missing',''} end; r.status='spent'; redis.call('SET',KEYS[1],cjson.encode(r),'EX',r.refresh.expires_unix-now); r.status='active'; f.rotations=f.rotations+1; redis.call('SET',KEYS[2],cjson.encode(r),'EX',r.refresh.expires_unix-now); redis.call('SET',fkey,cjson.encode(f),'EX',r.refresh.expires_unix-now); return {'ok',cjson.encode(r.refresh)}`
+const rotateRefreshScript = refreshBindingLua + rateLimitLua + `local raw=redis.call('GET',KEYS[1]); if not raw then return {'missing',''} end; local r=cjson.decode(raw); local now=tonumber(ARGV[1]); if r.refresh.client_id~=ARGV[2] or r.refresh.resource~=ARGV[3] or r.refresh.subject~=ARGV[4] or r.refresh.expires_unix<=now then return {'missing',''} end; if r.family_hash~=ARGV[5] then return {'missing',''} end; local fkey=KEYS[4]; local fraw=redis.call('GET',fkey); if not fraw then return {'missing',''} end; local f=cjson.decode(fraw); if not bound(r.refresh,f.refresh) or r.refresh.family_id~=f.refresh.family_id or r.refresh.grant_id~=f.refresh.grant_id or r.refresh.expires_unix~=f.refresh.expires_unix then return {'missing',''} end; if r.status=='spent' then f.status='revoked'; redis.call('SET',fkey,cjson.encode(f),'EX',r.refresh.expires_unix-now); redis.call('HDEL',KEYS[3],r.grant_hash); return {'replay',''} end; if r.status~='active' or f.status~='active' then return {'missing',''} end; local graw=redis.call('HGET',KEYS[3],r.grant_hash); if not graw then return {'missing',''} end; local g=cjson.decode(graw); if not bound(r.refresh,g) or r.refresh.grant_id~=g.id or g.expires_unix<r.refresh.expires_unix or g.expires_unix<=now then return {'missing',''} end; if redis.call('EXISTS',KEYS[2])==1 then return {'conflict',''} end; if f.rotations>=tonumber(ARGV[6]) then f.status='revoked'; redis.call('SET',fkey,cjson.encode(f),'EX',r.refresh.expires_unix-now); redis.call('HDEL',KEYS[3],r.grant_hash); return {'missing',''} end; if not allow_rate(KEYS[5],tonumber(ARGV[7]),tonumber(ARGV[8])) then return {'limited',''} end; r.status='spent'; redis.call('SET',KEYS[1],cjson.encode(r),'EX',r.refresh.expires_unix-now); r.status='active'; f.rotations=f.rotations+1; redis.call('SET',KEYS[2],cjson.encode(r),'EX',r.refresh.expires_unix-now); redis.call('SET',fkey,cjson.encode(f),'EX',r.refresh.expires_unix-now); return {'ok',cjson.encode(r.refresh)}`
 
 func (s *RedisStore) RotateRefresh(ctx context.Context, oldToken, newToken, clientID, resource string, now time.Time) (Refresh, error) {
 	if !validID(oldToken) || !validID(newToken) || oldToken == newToken || !validID(clientID) || !validID(resource) {
@@ -459,7 +465,7 @@ func (s *RedisStore) RotateRefresh(ctx context.Context, oldToken, newToken, clie
 	if json.Unmarshal(previewRaw, &state) != nil || !validID(state.Refresh.FamilyID) || state.FamilyHash != stateHash(state.Refresh.FamilyID) || state.GrantHash != stateHash(state.Refresh.GrantID) {
 		return Refresh{}, ErrUnavailable
 	}
-	v, e := s.command(ctx, "EVAL", rotateRefreshScript, 4, oldKey, s.prefix+"refresh:"+stateHash(newToken), s.prefix+"grants", s.prefix+"family:"+state.FamilyHash, now.Unix(), clientID, resource, s.owner, state.FamilyHash, maxFamilyRotations)
+	v, e := s.command(ctx, "EVAL", rotateRefreshScript, 5, oldKey, s.prefix+"refresh:"+stateHash(newToken), s.prefix+"grants", s.prefix+"family:"+state.FamilyHash, s.prefix+"rate:"+stateHash(tokenRateBucket(state.Refresh.GrantID)), now.Unix(), clientID, resource, s.owner, state.FamilyHash, maxFamilyRotations, tokenGrantLimit, int64(time.Minute/time.Second))
 	if e != nil {
 		return Refresh{}, e
 	}
@@ -468,6 +474,8 @@ func (s *RedisStore) RotateRefresh(ctx context.Context, oldToken, newToken, clie
 		return Refresh{}, ErrUnavailable
 	}
 	switch parts[0] {
+	case "limited":
+		return Refresh{}, ErrRateLimited
 	case "missing":
 		return Refresh{}, ErrNotFound
 	case "replay":
