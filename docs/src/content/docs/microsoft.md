@@ -14,7 +14,7 @@ For the full installation sequence, use [Connect Your Assistant](/docs/quickstar
 
 The configured account must have a usable primary mailbox. `MICROSOFT_ACCOUNT_ID` must equal Graph `/me.id`, and both `MAIL_USERNAME` and `MAIL_FROM` must match `/me.mail`. A display name, sign-in alias, or a guessed address is insufficient. The backend checks this identity before mailbox work. Sender aliases are unsupported.
 
-Provider consent requests delegated `User.Read`, `Mail.ReadWrite`, `Mail.Send`, and `offline_access` for a refresh grant. These permissions allow more than Angelos's default read-only capability switches. The MCP token, feature gates, and per-action assistant approvals remain independent safeguards. Registering an app or granting consent does not enable `MAIL_ENABLE_WRITES` or `MAIL_ENABLE_SEND`.
+Provider consent requests delegated `User.Read`, `Mail.ReadWrite`, `Mail.Send`, and `offline_access` for a refresh grant. The complete setup configures the corresponding Angelos read/write/send access at the same time. Provider permissions and Angelos permissions are distinct; permanent deletion is unavailable on this adapter. The MCP token, feature gates, and per-action assistant approvals remain independent safeguards. Registering an app or granting consent does not enable `MAIL_ENABLE_WRITES` or `MAIL_ENABLE_SEND`.
 
 Personal Outlook.com uses the `consumers` tenant. A work/school deployment uses the exact organization tenant UUID. The Entra application must permit the selected account audience. Organization policy can restrict app registration, user consent, or mailbox access; an administrator may need to approve it. Do not weaken tenant security or substitute application permissions to bypass a denial. [Microsoft delegated access](https://learn.microsoft.com/en-us/graph/auth-v2-user)
 
@@ -46,6 +46,6 @@ Angelos still requires its durable one-time send claim for dispatch. It does not
 
 ## Verify an actual account
 
-Synthetic tests validate code paths, not Microsoft consent eligibility or a live mailbox. After deployment, check provider capabilities, the verified intended folders, and an owner-selected read with write/send/delete switches off. Health alone checks configuration; it does not prove that Microsoft issued a usable grant or that the account matches `/me`.
+Synthetic tests validate code paths, not Microsoft consent eligibility or a live mailbox. After deployment, check provider capabilities, the verified intended folders, and an owner-selected read without changing or sending mail. Confirm the configured gates and granted scopes, while retaining the adapter’s permanent-deletion restriction. Health alone checks configuration; it does not prove that Microsoft issued a usable grant or that the account matches `/me`.
 
 Use disposable content and explicit permission for any later mutation or send test. If consent is blocked or a primary address is unavailable, report that account-specific blocker rather than treating fixture success as a working connection.

@@ -91,6 +91,8 @@ All six settings and the configured Redis REST store are required, including for
 
 `MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_JWKS_URL`, and `MCP_ALLOWED_SUBJECTS` are required. See [OAuth reference](/docs/oauth-reference#external-issuer-requirements) for their exact constraints and accepted JWT format.
 
+`MCP_OAUTH_INITIAL_SCOPES` controls the scopes requested by the initial unauthenticated MCP challenge. The complete setup sets `mail.read mail.write mail.send`; if unset, it defaults to `mail.read`. Only these three scopes are supported, and `mail.read` is required. Initial `mail.write` and `mail.send` requests are omitted when their corresponding server gates are off. This setting does not enable capability gates, expand existing tokens/grants, or change operation-specific insufficient-scope challenges.
+
 ### First-party OAuth (opt-in)
 
 Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enabled, the four `MCP_*` settings above must use the [configured origin and single-owner configuration](/docs/configuration#mcp-access). The same `ANGELOS_REDIS_REST_URL` and `ANGELOS_REDIS_REST_TOKEN` are required even with sending disabled. Set an explicit bare mailbox address in `MAIL_FROM` for the owner consent screen.
@@ -107,17 +109,17 @@ Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enab
 
 Configure an allowed client before connecting. First-party mode does not expose dynamic client registration, passwords, or public account signup. The cookie name, secure flags, and session lifetimes are fixed; the relying-party ID and allowed origin come from the explicitly configured issuer; there is no cookie signing secret or permissive development override. See [owner setup and recovery](/docs/oauth-reference#owner-recovery).
 
-## Optional capabilities
+## Capability gates
 
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `MAIL_ENABLE_WRITES` | Disabled | Allows mailbox mutations when the token also has `mail.write` |
 | `MAIL_ENABLE_SEND` | Disabled | Allows preparation and sending when the token has `mail.send` and a durable store is configured |
-| `MAIL_ENABLE_DELETE` | Disabled | Additional gate for permanent single-message deletion; ordinary writes must also be enabled; unavailable for Gmail/Workspace |
+| `MAIL_ENABLE_DELETE` | Disabled | Additional gate for permanent single-message deletion; ordinary writes must also be enabled; unavailable for Gmail/Workspace and Microsoft Graph |
 | `ANGELOS_REDIS_REST_URL` | Unset | HTTPS endpoint shared by first-party OAuth state, preparation/dispatch, and receipt lookup |
 | `ANGELOS_REDIS_REST_TOKEN` | Unset | Secret used to authenticate durable-store requests |
 
-Set an enable flag to `1` to opt in. A scoped token does not override a disabled gate. The Redis endpoint must support the command API used by the store, including `SET` and atomic Lua `EVAL`; a raw Redis TCP URL is unsupported.
+The [complete setup](/docs/quickstart#full-setup-with-your-consent) explicitly sets all three flags to `1` with owner consent. Unset runtime defaults remain off. Permanent deletion can be irreversible; provider restrictions and exact-action approval still apply. A scoped token does not override a disabled gate. The Redis endpoint must support the command API used by the store, including `SET` and atomic Lua `EVAL`; a raw Redis TCP URL is unsupported.
 
 A valid configured store remains available for owner-scoped receipt reads when `MAIL_ENABLE_SEND=0`; this does not enable preparation or SMTP submission. The store contains private prepared mail for up to 15 minutes and minimal dispatch records for seven days. Review [data handling](/docs/safety) before configuring a third-party store.
 

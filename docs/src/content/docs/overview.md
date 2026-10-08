@@ -8,7 +8,7 @@ category: Get started
 
 Angelos connects an AI assistant to your existing email account. Ask it to find a receipt, catch you up on an exchange, organize messages, or prepare a reply for review. You can keep using Apple Mail or another mail app alongside it.
 
-It is a self-hosted connection between an assistant and one mailbox. There is no Angelos-hosted signup or new email account to create. Your agent can set up the service in your own accounts; you approve access, enter secrets securely, and complete passkey enrollment. Each person runs a separate instance and decides which capabilities to enable.
+It is a self-hosted connection between an assistant and one mailbox. There is no Angelos-hosted signup or new email account to create. Your agent can set up the service in your own accounts; you approve access, enter secrets securely, and complete passkey enrollment. Each person runs a separate instance. The setup guide configures all supported capabilities together after explaining their permissions.
 
 ## Start with something useful
 
@@ -25,11 +25,11 @@ Angelos supplies the mail and the tools; your assistant interprets the request a
 ## What you can do
 
 - **Find and understand mail.** Search folders, read messages, retrieve attachments, and look up related messages linked by email headers in the same folder.
-- **Organize your inbox.** With mailbox changes enabled, mark messages read, add flags, create folders, copy or move mail, and move messages to Trash.
+- **Organize your inbox.** Mark messages read, add flags, create folders, copy or move mail, and move messages to Trash.
 - **Write with review.** Prepare new messages, replies, reply-all, and forwards. Review the final recipients, text, and attachments before sending.
 - **Keep your usual mail app.** Both clients use the same server mailbox. Changes made in either can appear in the other.
 
-Read access is the default. Mailbox changes, sending, and permanent deletion have separate operator-controlled switches and access permissions. Your client remains responsible for getting approval for individual mail actions. First-party OAuth consent grants a client scopes; it is not approval of a particular message or mailbox change.
+The setup guide enables reading, mailbox changes, sending, and supported permanent deletion from the outset. These have separate operator-controlled gates and OAuth scopes. Permanent deletion can be irreversible and is unavailable for Gmail/Workspace and Microsoft Graph. Your client remains responsible for getting approval for individual mail actions. First-party OAuth consent grants a client scopes; it is not approval of a particular message or mailbox change.
 
 ## Choose a mailbox
 
@@ -43,7 +43,7 @@ It also does not manage mail accounts, provider filtering rules, or desktop-only
 
 ## Choose your next step
 
-- **I’m getting started:** follow [Connect Your Assistant](/docs/quickstart), from deployment to your first ChatGPT request.
+- **I’m getting started:** follow [Connect Your Assistant](/docs/quickstart), from deployment to your first request in ChatGPT, Claude.ai, or a compatible assistant.
 - **I want updates handled for me:** use [Keep Angelos updated](/docs/keep-updated) after your first connection works.
 - **I want everyday examples:** open [Work with your inbox](/docs/inbox-guide) or [Write and send mail](/docs/sending-guide).
 - **I am building an agent:** use the [Agent playbook](/docs/agent-guide), then the [tool reference](/docs/tools).

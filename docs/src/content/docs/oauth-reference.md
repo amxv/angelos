@@ -6,7 +6,7 @@ order: 43
 category: Reference
 ---
 
-For the complete installation and ChatGPT connection, use [Connect Your Assistant](/docs/quickstart). This page is technical reference, not another setup path.
+For the complete installation and assistant connection, use [Connect Your Assistant](/docs/quickstart). This page is technical reference, not another setup path.
 
 ## Configured origin and owner
 
@@ -18,7 +18,7 @@ The signing key is a stable ES256 P-256 private key (PKCS#8 or EC PEM), with a u
 
 ## Client validation
 
-Predefined clients have an exact `client_id`, `client_name`, and HTTPS `redirect_uris` array. Token endpoint authentication is `none`, with PKCE S256. Dynamic registration and client secrets are not supported. The optional ChatGPT metadata mode accepts only `https://chatgpt.com/oauth/client.json` and the exact callback `https://chatgpt.com/connector_platform_oauth_redirect`.
+Predefined clients have an exact `client_id`, `client_name`, and HTTPS `redirect_uris` array. Each client gets its own entry; adding one must preserve the other approved entries. Token endpoint authentication is `none`, with PKCE S256. Dynamic registration and client secrets are not supported. Claude.ai uses a predefined public client with its exact hosted callback `https://claude.ai/api/mcp/auth_callback`; enter the configured client ID and leave its secret blank. Claude Code’s HTTP loopback redirect is unsupported by this server. The optional ChatGPT metadata mode accepts only `https://chatgpt.com/oauth/client.json` and the exact callback `https://chatgpt.com/connector_platform_oauth_redirect`.
 
 Metadata retrieval is restricted to that public HTTPS identity, without redirects, within five seconds and 32 KiB. Duplicate JSON members are rejected; the document must support `code`, authorization-code and refresh-token grants, and public-client authentication. Its process-local cache lasts at most five minutes, honors shorter cache directives, and fails closed after expiry. Invalid client/redirect requests fail locally, never redirecting to an untrusted destination. Authorization redirects carry the exact `iss` under RFC 9207.
 
@@ -30,7 +30,7 @@ If all authenticators are lost, take the API out of service for reviewed offline
 
 ## Consent, logout, and revocation
 
-Authorization requires owner sign-in and explicit consent identifying the actual client, the connected mailbox, the requested scopes, and their consequences. Every grant requires `mail.read`; `mail.write` and `mail.send` add capabilities, and all existing server gates still apply. A client cannot expand scopes by refreshing an existing grant. New scopes require a new authorization and consent flow.
+Authorization requires owner sign-in and explicit consent identifying the actual client, the connected mailbox, the requested scopes, and their consequences. Every grant requires `mail.read`; `mail.write` and `mail.send` add capabilities, and all existing server gates still apply. A client cannot expand scopes by refreshing an existing grant. New scopes require a new authorization and consent flow. The full setup sets `MCP_OAUTH_INITIAL_SCOPES=mail.read mail.write mail.send` so a new connection requests all three at once. Without this setting the initial challenge defaults to `mail.read`. Initial write/send scopes are only requested when their corresponding server gates are enabled; operation-specific challenges still require their exact scopes. Configuring an initial request never upgrades an existing grant.
 
 Open `/oauth/grants` to review and revoke connected grants. Revocation invalidates the grant for refresh and subsequent authenticated MCP requests, even if an issued access JWT has time remaining. Refresh-token replay also revokes the affected grant. Redis failure denies grant validation rather than allowing cached-token access. This does not cancel a mailbox operation that already passed authentication, undo a completed mail action, or make an ambiguous send safe to retry.
 
@@ -132,7 +132,7 @@ URLs must use public DNS names and HTTPS on port 443. Credentials, query strings
 
 ### Issuer prerequisites
 
-Configure your authorization server for an OAuth authorization-code flow with PKCE S256 and a client that ChatGPT can use. A predefined client is sufficient; the issuer can instead support dynamic client registration or Client ID Metadata Documents.
+Configure your authorization server for an OAuth authorization-code flow with PKCE S256 and a client that your assistant can use. A predefined client is sufficient; the issuer can instead support dynamic client registration or Client ID Metadata Documents.
 
 The issuer must publish discovery metadata and issue access tokens for the exact resource identified by `MCP_RESOURCE_URL`. Angelos accepts compact signed JWT access tokens with:
 

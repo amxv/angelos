@@ -2,11 +2,11 @@
 
 An agent-native email interface in Go. Angelos exposes a single existing mailbox (TLS IMAP/SMTP or delegated Microsoft Graph) through a private, OAuth-protected remote MCP server. Your other mail clients can keep using the same account.
 
-The repository is private while under active development and is intended to be open sourced later. Optional mailbox writes, permanent deletion, and sending are disabled by default.
+The setup guide configures reading, mailbox changes, sending, and supported permanent deletion together, with explicit owner consent. Unconfigured server gates remain off; the assistant still enforces approval for individual actions.
 
 ## Get connected
 
-Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One agent-led guide takes you from a personal fork and your own Vercel/Upstash accounts to your first read-only ChatGPT inbox request. Your agent handles installation and verification; you complete approvals, secure credential entry, passkeys, and custom-app consent. Coding agents can use the [personal setup skill](./.agents/skills/setup-personal-angelos/SKILL.md).
+Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One agent-led guide takes you from a personal fork and your own Vercel/Upstash accounts to a full-capability connection in your assistant, with ChatGPT and Claude.ai examples. Your agent handles installation and verification; you complete approvals, secure credential entry, passkeys, and assistant connector consent. Coding agents can use the [personal setup skill](./.agents/skills/setup-personal-angelos/SKILL.md).
 
 After connecting, optionally enable the [daily release updater](./docs/src/content/docs/keep-updated.md). Each person keeps a separate instance; updates preserve the existing domain, environment, Redis database, and owner identity.
 
@@ -20,7 +20,7 @@ After connecting, optionally enable the [daily release updater](./docs/src/conte
 - Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links on supported IMAP providers
 - Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
 - Inspect provider capabilities, discover folders, search, and read mail without marking it read
-- Opt into flag changes, folder creation/rename, copying, moving, Trash, and saved drafts
+- Change flags, create/rename folders, copy or move messages, use Trash, and save drafts
 - Prepare messages, natural replies/reply-all, and quoted or attached forwards with reviewed To/CC/BCC, text/HTML, and bounded attachments
 - Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
 - Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
@@ -46,11 +46,11 @@ Environment variables must be exported or injected by your runtime; the Go proce
 
 ## Deploy
 
-The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a separate Astro/ZueDocs project published at <https://angelos.ashray.xyz>. Keep their project roots and environment variables separate. Follow [Connect Your Assistant](./docs/src/content/docs/quickstart.md) for the complete Vercel, Redis, mailbox, passkey, and ChatGPT setup.
+The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a separate Astro/ZueDocs project published at <https://angelos.ashray.xyz>. Keep their project roots and environment variables separate. Follow [Connect Your Assistant](./docs/src/content/docs/quickstart.md) for the complete Vercel, Redis, mailbox, passkey, and assistant setup.
 
 ## Safety boundaries
 
-The MCP host is trusted to obtain the owner's approval. Payload digests bind content; they do not prove a human approved it. Sending additionally requires a durable Redis REST store. Provider acceptance is not delivery, and uncertain outcomes must not be retried automatically. Read [Safety and concurrency](./docs/src/content/docs/safety.md) before enabling writes or sends.
+The MCP host is trusted to obtain the owner's approval. Payload digests bind content; they do not prove a human approved it. Sending additionally requires a durable Redis REST store. Provider acceptance is not delivery, and uncertain outcomes must not be retried automatically. Read [Safety and concurrency](./docs/src/content/docs/safety.md) before granting full mailbox access. Permanent deletion is irreversible where supported; Gmail/Workspace and Microsoft Graph do not expose it.
 
 ## Documentation
 
