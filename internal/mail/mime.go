@@ -304,7 +304,7 @@ func parseMessageAttachment(raw []byte, out *Message, target int) ([]byte, error
 	out.Text = clean(text.String(), maxTextBytes)
 	if out.Text == "" && htmlFallback.Len() > 0 {
 		out.Text = clean(htmlFallback.String(), maxTextBytes)
-		out.Warnings = append(out.Warnings, "Text extracted from HTML; styling, scripts, links, and remote images are omitted.")
+		out.Warnings = append(out.Warnings, "Text extracted from HTML; styling, scripts, and remote images are omitted. Selected absolute HTTP(S)/mailto link destinations are included as untrusted text, not verified or fetched.")
 	}
 	if out.Truncated {
 		out.Warnings = append(out.Warnings, "Message exceeds read limits or contains incomplete MIME data; returned content may be partial.")

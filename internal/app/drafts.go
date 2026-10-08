@@ -95,6 +95,10 @@ func (a *App) reviseDraft(ctx context.Context, in createInput) (any, error) {
 	if err := a.draftSender(source); err != nil {
 		return nil, err
 	}
+	if (in.Changes.Text != nil && in.Changes.HTML == nil && source.Message.HTML != "") ||
+		(in.Changes.HTML != nil && in.Changes.Text == nil && (source.Message.Text != "" || source.Message.PreserveEmptyText)) {
+		return nil, invalidArgumentsError(errors.New("body alternatives require an explicit choice: supply both changes.text and changes.html, updating or clearing each; omitted alternatives would preserve stale content"))
+	}
 	message := in.Changes.Apply(source.Message)
 	p, err := a.composeDraft(message)
 	if err != nil {

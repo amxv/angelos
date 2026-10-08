@@ -88,7 +88,7 @@ func TestReviseDraftAppendsPreservingSourceAndFields(t *testing.T) {
 	f := newGroupedAuthFixture(t)
 	a, b, s := newDraftApp(t)
 	before, _ := json.Marshal(b.source)
-	args := strings.TrimSuffix(draftArgs(b, "revise_draft"), "}") + `,"changes":{"subject":"Revised","text":"New text"}}`
+	args := strings.TrimSuffix(draftArgs(b, "revise_draft"), "}") + `,"changes":{"subject":"Revised","text":"New text","html":"<p>New HTML</p>"}}`
 	status, out := f.call(t, a, "mail.read mail.write", "mail_create", args)
 	body := groupedResult(t, status, out)["structuredContent"].(map[string]any)
 	after, _ := json.Marshal(b.source)
@@ -99,7 +99,7 @@ func TestReviseDraftAppendsPreservingSourceAndFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if revised.Message.Subject != "Revised" || revised.Message.Text != "New text" || revised.Message.HTML != b.source.Message.HTML || !reflect.DeepEqual(revised.Message.Bcc, b.source.Message.Bcc) || !reflect.DeepEqual(revised.Message.Attachments, b.source.Message.Attachments) || revised.Message.InReplyTo != b.source.Message.InReplyTo || !reflect.DeepEqual(revised.Message.References, b.source.Message.References) {
+	if revised.Message.Subject != "Revised" || revised.Message.Text != "New text" || revised.Message.HTML != "<p>New HTML</p>" || !reflect.DeepEqual(revised.Message.Bcc, b.source.Message.Bcc) || !reflect.DeepEqual(revised.Message.Attachments, b.source.Message.Attachments) || revised.Message.InReplyTo != b.source.Message.InReplyTo || !reflect.DeepEqual(revised.Message.References, b.source.Message.References) {
 		t.Fatalf("revision lost source fields: %+v", revised)
 	}
 	if revised.MessageID == b.source.MessageID {
@@ -114,7 +114,7 @@ func TestReviseDraftAppendsPreservingSourceAndFields(t *testing.T) {
 func TestReviseDraftExplicitEmptyFieldsAndDestination(t *testing.T) {
 	f := newGroupedAuthFixture(t)
 	a, b, _ := newDraftApp(t)
-	args := strings.TrimSuffix(draftArgs(b, "revise_draft"), "}") + `,"folder":"Draft Revisions","changes":{"to":[],"cc":[],"bcc":[],"text":"","attachments":[],"in_reply_to":"","references":[]}}`
+	args := strings.TrimSuffix(draftArgs(b, "revise_draft"), "}") + `,"folder":"Draft Revisions","changes":{"to":[],"cc":[],"bcc":[],"text":"","html":"<p>Original HTML</p>","attachments":[],"in_reply_to":"","references":[]}}`
 	status, out := f.call(t, a, "mail.read mail.write", "mail_create", args)
 	groupedResult(t, status, out)
 	d, err := compose.ParseDraft(b.draft)
@@ -328,7 +328,7 @@ func TestDraftPayloadLimitsReturnNoPartialOrMutation(t *testing.T) {
 				tool, scope, args = "mail_create", "mail.read mail.write", strings.TrimSuffix(draftArgs(b, "revise_draft"), "}")+`,"changes":{"subject":"changed"}}`
 				b.source.Message.Text = strings.Repeat("x", maxDraftResponseBytes)
 			case "revision replacement":
-				tool, scope, args = "mail_create", "mail.read mail.write", strings.TrimSuffix(draftArgs(b, "revise_draft"), "}")+`,"changes":{"text":"`+strings.Repeat("x", maxDraftResponseBytes)+`"}}`
+				tool, scope, args = "mail_create", "mail.read mail.write", strings.TrimSuffix(draftArgs(b, "revise_draft"), "}")+`,"changes":{"text":"`+strings.Repeat("x", maxDraftResponseBytes)+`","html":""}}`
 			case "prepare source":
 				tool, scope, args = "mail_prepare", "mail.read mail.send", draftArgs(b, "draft")
 				b.source.Message.Text = strings.Repeat("x", maxDraftResponseBytes)
@@ -343,6 +343,55 @@ func TestDraftPayloadLimitsReturnNoPartialOrMutation(t *testing.T) {
 			r := out["result"].(map[string]any)["structuredContent"].(map[string]any)
 			if r["error_code"] != "safety_limit" || r["outcome"] != nil || !reflect.DeepEqual(b.calls, []string{"read_draft"}) || s.puts+s.claims != 0 {
 				t.Fatalf("unsafe limit result: %#v %v", r, b.calls)
+			}
+		})
+	}
+}
+
+func TestDraftBodyAlternativesRequireExplicitChoice(t *testing.T) {
+	f := newGroupedAuthFixture(t)
+	for _, tc := range []struct {
+		name, sourceText, sourceHTML, patch string
+		preserveText, reject                bool
+	}{
+		{"text leaves old HTML", "old", "<p>old</p>", `{"text":"new"}`, true, true},
+		{"HTML leaves old text", "old", "<p>old</p>", `{"html":"<p>new</p>"}`, true, true},
+		{"clearing HTML requires text choice", "old", "<p>old</p>", `{"html":""}`, true, true},
+		{"adding HTML requires text choice", "old", "", `{"html":"<p>new</p>"}`, true, true},
+		{"adding text requires HTML choice", "", "<p>old</p>", `{"text":"new"}`, false, true},
+		{"explicit empty plain alternative", "", "<p>old</p>", `{"html":"<p>new</p>"}`, true, true},
+		{"both updated", "old", "<p>old</p>", `{"text":"new","html":"<p>new</p>"}`, true, false},
+		{"HTML explicitly cleared", "old", "<p>old</p>", `{"text":"new","html":""}`, true, false},
+		{"text-only edit", "old", "", `{"text":"new"}`, true, false},
+		{"HTML-only derives new text", "", "<p>old</p>", `{"html":"<p>new</p>"}`, false, false},
+		{"subject-only preserves both", "old", "<p>old</p>", `{"subject":"new"}`, true, false},
+		{"recipient-only preserves both", "old", "<p>old</p>", `{"to":["other@example.com"]}`, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b, _ := newDraftApp(t)
+			b.source.Message.Text, b.source.Message.HTML = tc.sourceText, tc.sourceHTML
+			b.source.Message.PreserveEmptyText = tc.preserveText
+			args := strings.TrimSuffix(draftArgs(b, "revise_draft"), "}") + `,"changes":` + tc.patch + `}`
+			status, out := f.call(t, a, "mail.read mail.write", "mail_create", args)
+			if tc.reject {
+				groupedExpectError(t, status, out)
+				r := out["result"].(map[string]any)
+				payload := r["structuredContent"].(map[string]any)
+				if payload["error_code"] != "invalid_arguments" || !strings.Contains(payload["error"].(string), "supply both changes.text and changes.html") || !reflect.DeepEqual(b.calls, []string{"read_draft"}) {
+					t.Fatalf("unsafe alternative revision: %#v %v", payload, b.calls)
+				}
+				return
+			}
+			groupedResult(t, status, out)
+			if !reflect.DeepEqual(b.calls, []string{"read_draft", "draft"}) {
+				t.Fatal(b.calls)
+			}
+			parsed, err := compose.ParseDraft(b.draft)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.name == "HTML-only derives new text" && parsed.Message.Text != "new" {
+				t.Fatalf("stale derived text: %+v", parsed.Message)
 			}
 		})
 	}

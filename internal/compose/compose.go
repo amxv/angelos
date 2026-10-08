@@ -29,9 +29,9 @@ const MaxReferences = 100
 const MaxReferencesBytes = 8 << 10
 
 type Attachment struct {
-	Filename    string `json:"filename" jsonschema:"Attachment filename; no paths"`
-	ContentType string `json:"content_type" jsonschema:"MIME type and optional parameters such as application/pdf"`
-	DataBase64  string `json:"data_base64" jsonschema:"Base64 bytes; maximum total decoded attachments 3 MiB"`
+	Filename    string `json:"filename" jsonschema:"Filename; no paths"`
+	ContentType string `json:"content_type" jsonschema:"MIME type, e.g. application/pdf"`
+	DataBase64  string `json:"data_base64" jsonschema:"Base64; files total ≤3 MiB"`
 }
 type Input struct {
 	To                []string     `json:"to,omitempty"`
@@ -39,7 +39,7 @@ type Input struct {
 	Bcc               []string     `json:"bcc,omitempty"`
 	Subject           string       `json:"subject"`
 	Text              string       `json:"text"`
-	HTML              string       `json:"html,omitempty" jsonschema:"Optional authored HTML alternative; reviewed in full before sending"`
+	HTML              string       `json:"html,omitempty" jsonschema:"HTML; review before send"`
 	Attachments       []Attachment `json:"attachments,omitempty"`
 	InReplyTo         string       `json:"in_reply_to,omitempty"`
 	References        []string     `json:"references,omitempty"`

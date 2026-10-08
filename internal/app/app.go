@@ -20,7 +20,7 @@ import (
 )
 
 // Version identifies the public MCP interface and HTTP service build.
-const Version = "0.8.0"
+const Version = "0.9.0"
 
 type Submitter interface {
 	Send(context.Context, mail.Envelope, []byte) (mail.SendResult, error)
@@ -119,9 +119,9 @@ func (a *App) Server() *mcp.Server {
 }
 
 type sendInput struct {
-	PreparedID      string `json:"prepared_id"`
-	ConfirmedDigest string `json:"confirmed_digest"`
-	AppendSent      bool   `json:"append_sent"`
+	PreparedID      string `json:"prepared_id" jsonschema:"Exact prepared_id from mail_prepare"`
+	ConfirmedDigest string `json:"confirmed_digest" jsonschema:"Exact digest from the approved mail_prepare preview"`
+	AppendSent      bool   `json:"append_sent" jsonschema:"False if mail_query capabilities says smtp_stores_sent (Gmail); true adds Sent copy, needs write scope/gate"`
 }
 
 func (a *App) compose(in compose.Input) (compose.Prepared, error) {

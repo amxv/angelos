@@ -145,7 +145,7 @@ func TestToolSchemaTokenBudget(t *testing.T) {
 	}
 	oldCount, oldSchemas := countSchemas(baseline)
 	newCount, newSchemas := countSchemas(current)
-	t.Logf("tools: %d -> %d; tools/list tools array UTF-8 JSON bytes: %d -> %d; inputSchema bytes: %d -> %d; approximate tokens ceil(bytes/4), not a tokenizer: %d -> %d", oldCount, newCount, len(baseline), len(current), oldSchemas, newSchemas, (len(baseline)+3)/4, (len(current)+3)/4)
+	t.Logf("tools: %d -> %d; tools/list tools array UTF-8 JSON bytes: %d -> %d; inputSchema bytes: %d -> %d", oldCount, newCount, len(baseline), len(current), oldSchemas, newSchemas)
 }
 func TestMissingScopeReturnsChallengeWithoutBackend(t *testing.T) {
 	a := &App{AuthChallenge: func(string) string { return `Bearer scope="mail.read mail.send"` }}
@@ -169,7 +169,7 @@ func TestToolSchemaReleaseSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "testdata/tools-list-v0.8.0.json"
+	path := "testdata/tools-list-v0.9.0.json"
 	if os.Getenv("UPDATE_TOOL_SNAPSHOT") == "1" {
 		if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
 			t.Fatal(err)
@@ -180,6 +180,6 @@ func TestToolSchemaReleaseSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(bytes.TrimSpace(want), data) {
-		t.Fatal("tool schema changed; review and intentionally update the 0.8.0 snapshot")
+		t.Fatal("tool schema changed; review and intentionally update the 0.9.0 snapshot")
 	}
 }

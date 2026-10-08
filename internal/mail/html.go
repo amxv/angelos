@@ -2,21 +2,25 @@ package mail
 
 import (
 	"io"
+	"net/url"
 	"strings"
+	"unicode"
 
 	"golang.org/x/net/html"
 )
 
 // htmlText extracts text with a streaming tokenizer. No DOM, scripts, styles,
-// attributes, remote resources, or links are evaluated. Bounds apply even to
-// malformed HTML and to extremely long tokens or deeply nested markup.
+// remote resources, or links are evaluated. Selected hrefs are untrusted text.
+// Bounds apply even to malformed HTML and extremely long or deeply nested markup.
 func htmlText(r io.Reader) (string, bool) {
 	limited := &io.LimitedReader{R: r, N: (1 << 20) + 1}
 	tokenizer := html.NewTokenizer(limited)
 	tokenizer.SetMaxBuf(64 << 10)
 	type frame struct {
-		tag    string
-		hidden bool
+		tag       string
+		hidden    bool
+		href      string
+		textStart int
 	}
 	stack := make([]frame, 0, 32)
 	var out strings.Builder
@@ -32,10 +36,17 @@ func htmlText(r io.Reader) (string, bool) {
 	}
 	finish := func(truncated bool) (string, bool) {
 		lines := strings.Split(clean(out.String(), maxTextBytes), "\n")
-		for i, line := range lines {
-			lines[i] = strings.Join(strings.Fields(line), " ")
+		normalized := lines[:0]
+		for _, line := range lines {
+			line = strings.Join(strings.Fields(line), " ")
+			// Nested layout tags and source indentation are not paragraphs.
+			// Keep at most one blank line, while preserving nonempty lines.
+			if line == "" && (len(normalized) == 0 || normalized[len(normalized)-1] == "") {
+				continue
+			}
+			normalized = append(normalized, line)
 		}
-		return strings.TrimSpace(strings.Join(lines, "\n")), truncated
+		return strings.TrimSpace(strings.Join(normalized, "\n")), truncated
 	}
 	for count := 0; count < 20000; count++ {
 		kind := tokenizer.Next()
@@ -49,12 +60,23 @@ func htmlText(r io.Reader) (string, bool) {
 				}
 			}
 		case html.StartTagToken, html.SelfClosingTagToken:
-			name, _ := tokenizer.TagName()
+			name, hasAttrs := tokenizer.TagName()
 			tag := string(name)
 			discard := hidden() || htmlDiscardTag(tag)
 			if !discard && htmlBlockTag(tag) {
 				if !add("\n") {
 					return finish(true)
+				}
+			}
+			var href string
+			if tag == "a" && !discard {
+				for hasAttrs {
+					key, value, more := tokenizer.TagAttr()
+					hasAttrs = more
+					if string(key) == "href" {
+						href = htmlLinkDestination(string(value))
+						break // HTML uses the first occurrence of an attribute.
+					}
 				}
 			}
 			// In HTML, a self-closing slash does not close non-void elements
@@ -64,7 +86,7 @@ func htmlText(r io.Reader) (string, bool) {
 				if len(stack) >= 128 {
 					return finish(true)
 				}
-				stack = append(stack, frame{tag: tag, hidden: discard})
+				stack = append(stack, frame{tag: tag, hidden: discard, href: href, textStart: out.Len()})
 			}
 		case html.EndTagToken:
 			name, _ := tokenizer.TagName()
@@ -72,6 +94,15 @@ func htmlText(r io.Reader) (string, bool) {
 			wasHidden := hidden()
 			for i := len(stack) - 1; i >= 0; i-- {
 				if stack[i].tag == tag {
+					f := stack[i]
+					if !wasHidden && f.href != "" {
+						label := strings.TrimSpace(out.String()[f.textStart:])
+						if label != "" && label != f.href && label != strings.TrimPrefix(f.href, "mailto:") {
+							if !add(" <" + f.href + ">") {
+								return finish(true)
+							}
+						}
+					}
 					stack = stack[:i]
 					break
 				}
@@ -105,4 +136,32 @@ func htmlBlockTag(tag string) bool {
 		return true
 	}
 	return false
+}
+
+// htmlLinkDestination allows only bounded absolute web/mail destinations. It
+// does not resolve relative references, decode escapes, or verify trust/safety.
+func htmlLinkDestination(raw string) string {
+	if raw == "" || len(raw) > 2048 || clean(raw, len(raw)) != raw {
+		return ""
+	}
+	for _, r := range raw {
+		if unicode.IsSpace(r) || r == '<' || r == '>' {
+			return ""
+		}
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil {
+		return ""
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		if u.Hostname() != "" && u.Opaque == "" {
+			return raw
+		}
+	case "mailto":
+		if u.Opaque != "" && u.Host == "" {
+			return raw
+		}
+	}
+	return ""
 }

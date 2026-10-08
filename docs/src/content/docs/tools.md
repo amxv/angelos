@@ -14,7 +14,7 @@ Mail text, headers, filenames, and attachment data are untrusted. See [Safety an
 
 ## Six tools, grouped by permission and risk
 
-Angelos 0.8.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and null fields are rejected before mailbox access, including explicit nulls inside message objects. There is no arbitrary command input.
+Angelos 0.9.0 exposes six tools for 25 operations, including bounded batch reading and a structured saved-draft workflow. Each grouped tool has a typed `action` enum and typed argument fields. Only fields belonging to the selected action are accepted; unknown, irrelevant, missing required, and top-level null fields are rejected before mailbox access, including explicit nulls inside message objects. Optional search `unread`/`flagged` filters retain their legacy null-as-omitted behavior. There is no arbitrary command input.
 
 | Tool | Scope in addition to `mail.read` | MCP annotations |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ Call `mail_query` with one of these actions:
 
 ### Message identity
 
-Use the exact reference returned by a search. Never substitute a display row number or reuse a source UID in a destination folder.
+In compact search/triage/conversation results, use a row’s `reference` when present; otherwise combine the page’s `folder` and `uid_validity` with that row’s `uid`. Full results already include each exact `reference`. Never substitute a display row number or reuse a source UID in a destination folder.
 
 ```json
 {
@@ -185,7 +185,7 @@ Exact references, flags/MODSEQ, Reply-To and other selected headers, attachment 
 
 ### Read limits
 
-Reads inspect up to a 5 MiB raw-message prefix and return at most 256 KiB of text. MIME parsing is bounded to 12 nested levels and 100 parts. Plain-text alternatives are preferred; HTML-only mail uses text extraction with a warning. Extraction reads at most 1 MiB of HTML, with a 64 KiB token limit, 20,000-token limit, and 128-level stack limit. It does not render content or fetch resources. Truncation can make attachment metadata incomplete.
+Reads inspect up to a 5 MiB raw-message prefix and return at most 256 KiB of text. MIME parsing is bounded to 12 nested levels and 100 parts. Plain-text alternatives are preferred; HTML-only mail uses text extraction with a warning. Extraction reads at most 1 MiB of HTML, with a 64 KiB token limit, 20,000-token limit, and 128-level stack limit. Repeated blank lines are collapsed. Visible anchor labels may retain absolute HTTP(S)/mailto destinations (up to 2 KiB) as untrusted text; relative, credential-bearing, malformed, and other-scheme destinations are omitted. It does not render content, verify destinations, or fetch resources. Truncation can make attachment metadata incomplete.
 
 Attachment retrieval uses the one-based index from `mail_query` action `read`, rereads the referenced message, and returns at most 2 MiB of transfer-decoded attachment bytes. The complete enclosing message must fit the 5 MiB read limit. Text-file attachments retain their original bytes and character encoding; charset conversion applies only to displayed message text. An explicitly attached multipart container is one attachment, and its children are excluded from displayed text and inline forwards. Unsupported transfer encodings or decoding failures return an error instead of a successful partial or undecoded download. Bytes are returned as base64; the server does not open or execute files or fetch attachment URLs.
 
@@ -239,7 +239,7 @@ Permanent deletion additionally requires `MAIL_ENABLE_DELETE=1`, exact per-actio
 ## Saved draft lifecycle
 
 1. Read a saved draft with `mail_query` action `draft` and its exact `reference`. This returns complete supported structured content (To/Cc/Bcc, subject, text/HTML, threading and attachment bytes), `source_digest`, the original Message-ID, and normalization warnings. It does not mark the message read.
-2. To save changes, call `mail_create` action `revise_draft` with that reference, exact lowercase SHA-256 `source_digest`, and `changes`. Only supplied fields are replaced; omitted fields retain the source. Empty strings/lists explicitly clear the corresponding supported fields. `attachments` replaces the entire list, rather than adding to it. Text and HTML alternatives are independent: update or clear both when needed.
+2. To save changes, call `mail_create` action `revise_draft` with that reference, exact lowercase SHA-256 `source_digest`, and `changes`. Only supplied fields are replaced; omitted fields retain the source. Empty strings/lists explicitly clear the corresponding supported fields. `attachments` replaces the entire list, rather than adding to it. When editing a body that already has the other alternative, explicitly supply both `text` and `html`, updating or clearing each. A one-sided edit is rejected as `invalid_arguments` before APPEND to prevent stale content in the other alternative. Subject/recipient-only edits preserve both bodies. True HTML-only sources can update HTML alone and derive new plaintext; text-only sources can update text alone.
 3. A revision appends a **new** draft to the source folder unless an explicit destination `folder` is supplied. It never changes, flags, or deletes the source. Refresh the folder listing/read the new reference before further changes.
 4. To send a reviewed saved version, use `mail_prepare` action `draft` with its reference and digest. The server rereads it, checks the digest, and produces the usual immutable 15-minute preview. Review it before `mail_send_confirmed`; the original draft remains after sending.
 

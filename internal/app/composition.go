@@ -134,12 +134,12 @@ func sourceDate(value string) time.Time {
 
 func (a *App) prepareSource(ctx context.Context, in prepareInput) (any, error) {
 	if len(in.AttachmentIndexes) > 20 {
-		return nil, errors.New("select at most 20 source attachments")
+		return nil, invalidArgumentsError(errors.New("select at most 20 source attachments"))
 	}
 	selected := make(map[int]bool)
 	for _, index := range in.AttachmentIndexes {
 		if index < 1 || index > 100 || selected[index] {
-			return nil, errors.New("source attachment indexes must be unique integers from 1 to 100")
+			return nil, invalidArgumentsError(errors.New("source attachment indexes must be unique integers from 1 to 100"))
 		}
 		selected[index] = true
 	}
@@ -148,10 +148,10 @@ func (a *App) prepareSource(ctx context.Context, in prepareInput) (any, error) {
 		mode = "quoted"
 	}
 	if mode != "quoted" && mode != "eml" && mode != "none" {
-		return nil, errors.New("unsupported original_mode")
+		return nil, invalidArgumentsError(errors.New("unsupported original_mode"))
 	}
 	if mode != "quoted" && in.QuoteOriginal != nil {
-		return nil, errors.New("quote_original applies only to quoted originals")
+		return nil, invalidArgumentsError(errors.New("quote_original applies only to quoted originals"))
 	}
 	attachmentCount := len(in.Message.Attachments) + len(in.AttachmentIndexes)
 	if mode == "eml" {

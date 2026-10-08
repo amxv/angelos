@@ -6,7 +6,7 @@ order: 12
 category: Use your inbox
 ---
 
-Angelos 0.8.0 exposes six MCP tools and 25 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
+Angelos 0.9.0 exposes six MCP tools and 25 operations. Use the [tool reference](/docs/tools) for complete schemas and limits. Replace illustrative references and preparation identifiers below with exact returned values.
 
 ## 1. Discover capabilities and permissions
 
@@ -111,7 +111,7 @@ Use an observed MODSEQ for `unchanged_since`; it requires CONDSTORE. Without tha
 
 Moves require native MOVE; Trash requires a uniquely advertised Trash folder. Refresh references afterward. An accepted copy/move without destination UID mapping needs destination verification before another action. Never blindly retry an uncertain mutation.
 
-`mail_create` with `action: "draft"` and `message` appends a new draft. For an existing draft, use `mail_query` action `draft` to obtain the supported complete structure and `source_digest`; ordinary read output is not an editable reconstruction. Use `mail_create` action `revise_draft` with explicit `changes` to append a revised copy, or `mail_prepare` action `draft` to prepare that exact snapshot for review. Preserve the original, reread after digest conflicts, and never silently drop unsupported MIME. See [the draft lifecycle](/docs/tools#saved-draft-lifecycle). Permanent deletion takes `folder`, `uid_validity`, and `uid` directly, without an `action` or nested `reference`. See [mailbox writes](/docs/tools#mailbox-writes).
+`mail_create` with `action: "draft"` and `message` appends a new draft. For an existing draft, use `mail_query` action `draft` to obtain the supported complete structure and `source_digest`; ordinary read output is not an editable reconstruction. Use `mail_create` action `revise_draft` with explicit `changes` to append a revised copy (body edits must set or clear both existing text/HTML alternatives), or `mail_prepare` action `draft` to prepare that exact snapshot for review. Preserve the original, reread after digest conflicts, and never silently drop unsupported MIME. See [the draft lifecycle](/docs/tools#saved-draft-lifecycle). Permanent deletion takes `folder`, `uid_validity`, and `uid` directly, without an `action` or nested `reference`. See [mailbox writes](/docs/tools#mailbox-writes).
 
 ## 5. Prepare, review, then dispatch
 

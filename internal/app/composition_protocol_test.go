@@ -478,3 +478,17 @@ func TestSourceAttachmentBoundsBeforeFetch(t *testing.T) {
 		})
 	}
 }
+
+func TestForwardOptionErrorsGiveCorrectInputRecovery(t *testing.T) {
+	f := newGroupedAuthFixture(t)
+	for _, mode := range []string{"eml", "none"} {
+		a, b, s := newGroupedApp()
+		args := `{"action":"forward","reference":` + groupedReferenceJSON + `,"message":{"to":["to@example.com"],"text":"Note"},"original_mode":"` + mode + `","quote_original":false}`
+		status, out := f.call(t, a, "mail.read mail.send", "mail_prepare", args)
+		groupedExpectError(t, status, out)
+		payload := out["result"].(map[string]any)["structuredContent"].(map[string]any)
+		if payload["error_code"] != "invalid_arguments" || payload["retry"].(map[string]any)["action"] != "correct_input" || len(b.calls) != 0 || s.puts+s.claims != 0 {
+			t.Fatalf("incorrect recovery or side effects: %#v %v", payload, b.calls)
+		}
+	}
+}

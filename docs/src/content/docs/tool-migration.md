@@ -8,7 +8,7 @@ category: Reference
 
 New integrations can start with the [agent guide](/docs/agent-guide); this page is for upgrading existing clients and measuring their discovery cost.
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, **0.6.0**, **0.7.0**, and **0.8.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
+The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, **0.6.0**, **0.7.0**, **0.8.0**, and **0.9.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
 
 ## Operation parity
 
@@ -164,3 +164,16 @@ Refresh the client’s tool schema after deployment. Never reconstruct an editab
 ### Version 0.8 discovery measurement
 
 The final deterministic fixture measures 11,004 structural JSON bytes, compared with 10,341 before the draft actions, plus 429 bytes for the OAuth metadata mirror: **11,433 complete wire bytes**. The original 17-tool fixture remains unchanged at 14,886 bytes. The structural regression budget is 70% of that baseline plus a separately bounded 768-byte draft allowance; the OAuth mirror retains its independent 512-byte ceiling. This is compact JSON size, not a tokenizer measurement, and does not claim the current complete schema is below 70% of the baseline.
+
+
+## Version 0.9: first-use clarity and safe body edits
+
+The six names and 25 operations are unchanged. Refresh discovery: action arguments now use `?` for optional fields, disallowed nulls are no longer advertised, and field help covers literal search/defaults/date boundaries, exact compact references, batch continuation, standard flags, draft digests, forwarding options, and preview-to-send values. Existing optional `search.unread`/`search.flagged` null-as-omitted behavior remains supported.
+
+Draft body revisions now require an explicit choice for both alternatives when the other authored body exists: set or clear both `changes.text` and `changes.html`. One-sided edits return `invalid_arguments` before APPEND, preventing an old HTML body from surviving a text edit or vice versa. Subject/recipient-only edits still preserve bodies; genuine HTML-only sources can update HTML and regenerate plaintext. Read the new revision for its own source digest before preparing it. Explicit invalid forward options now also report `invalid_arguments`.
+
+HTML-only incoming mail collapses excess blank lines and may retain bounded absolute HTTP(S)/mailto anchor destinations as untrusted text. No remote resources are fetched, destinations verified, or links executed; extraction limits still apply. See [read limits](/docs/tools#read-limits).
+
+### Version 0.9 discovery measurement
+
+On the complete deterministic six-tool fixture, compact UTF-8 JSON is **11,433 → 11,383 bytes** (including both OAuth metadata declarations). A local expansion of `$ref` with `$defs` removed is **12,299 → 12,294 bytes**. These small reductions accompany more complete first-use guidance; they are not token counts or measured connector-context savings. Connectors can expand references or otherwise transform discovery. Both complete forms have regression checks against the unchanged 0.8 snapshot; the original 17-tool baseline and prior historical measurements remain intact. Preparation previews and review-critical content are never shortened.
