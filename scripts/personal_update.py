@@ -61,8 +61,8 @@ def api(path, token="", method="GET", body=None, base="https://api.github.com"):
     except urllib.error.HTTPError as error:
         if error.code == 404 and path.endswith("/releases/latest"):
             raise Stop("No accessible published stable upstream release is available; wait for a tested release or verify optional private-upstream access.") from None
-        if error.code == 403 and error.headers.get("X-RateLimit-Remaining") == "0":
-            raise Stop("GitHub API rate limit reached; retry after the reset. No update was applied.") from None
+        if base == "https://api.github.com" and error.code == 403 and error.headers and error.headers.get("X-RateLimit-Remaining") == "0":
+            raise Stop("GitHub API rate limit reached; retry after the reset and inspect earlier deployment steps.") from None
         raise Stop(f"Service request failed ({error.code}); check access and Actions logs. No settings changed.") from None
     except (OSError, ValueError):
         raise Stop("Service unavailable or returned invalid JSON; no credentials were logged.") from None

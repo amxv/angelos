@@ -22,6 +22,11 @@ class PolicyTests(unittest.TestCase):
             update.api("/repos/amxv/angelos", "fixture-private-read-token")
         self.assertEqual(request.call_args.args[0].get_header("Authorization"), "Bearer fixture-private-read-token")
 
+    def test_rate_limit_fails_without_claiming_deployment_was_undone(self):
+        error = update.urllib.error.HTTPError("https://api.github.com/fixture", 403, "Forbidden", {"X-RateLimit-Remaining": "0"}, None)
+        with patch.object(update, "request_json", side_effect=error), self.assertRaisesRegex(update.Stop, "rate limit.*earlier deployment steps"):
+            update.api("/fixture")
+
     def test_askpass_restricts_private_token_to_github(self):
         script = Path(__file__).resolve().parent / "upstream-askpass.sh"
         for prompt, token, code, output in (
