@@ -1,68 +1,35 @@
 # Angelos
 
-An agent-native email interface in Go. Angelos exposes a single existing mailbox (TLS IMAP/SMTP or delegated Microsoft Graph) through a private, OAuth-protected remote MCP server. Your other mail clients can keep using the same account.
+Your inbox, connected to your AI assistant.
 
-The setup guide configures reading, mailbox changes, sending, and supported permanent deletion together, with explicit owner consent. Unconfigured server gates remain off; the assistant still enforces approval for individual actions.
+Angelos is a self-hosted email MCP server for ChatGPT, Claude, and other compatible clients. It lets your assistant read, search, organize, draft, reply, and send using your existing email account.
 
-## Get connected
+You host your own instance and can connect multiple assistants to one mailbox while keeping your usual mail apps. Access is protected by OAuth and passkey sign-in.
 
-Start with [Connect Your Assistant](./docs/src/content/docs/quickstart.md). One agent-led guide takes you from a personal fork and your own Vercel/Upstash accounts to a full-capability connection in your assistant, with ChatGPT and Claude.ai examples. Your agent handles installation and verification; you complete approvals, secure credential entry, passkeys, and assistant connector consent. Coding agents can use the [personal setup skill](./.agents/skills/setup-personal-angelos/SKILL.md).
+## What you can do
 
-After connecting, optionally enable the [daily release updater](./docs/src/content/docs/keep-updated.md). Each person keeps a separate instance; updates preserve the existing domain, environment, Redis database, and owner identity.
+- Find messages by sender, subject, date, or content.
+- Read mail and retrieve attachments without marking messages as read.
+- Organize folders, move messages, and update read or flagged status.
+- Save drafts, prepare replies and forwards, and send reviewed messages with attachments.
 
-## Capabilities
+## Get started
 
-- Spacemail, iCloud, Yahoo, and custom TLS IMAP/SMTP presets; iCloud/Yahoo require provider app passwords
-- Outlook.com and eligible Microsoft 365 delegated Graph access with account-bound references and native Sent filing
-- Gmail/Workspace XOAUTH2 for personal/internal use, with pinned hosts and conservative Sent/delete safeguards
-- Six risk-separated MCP tools cover 25 operations with compact schemas and optional full-detail message results
-- Read up to ten selected messages in one bounded call, with explicit per-item errors and continuation
-- Triage unread or flagged mail with page-only counts, then inspect bounded same-folder conversations through exact header links on supported IMAP providers
-- Find exact Message-IDs or visible participants, and inspect your send receipts without sending again
-- Inspect provider capabilities, discover folders, search, and read mail without marking it read
-- Change flags, create/rename folders, copy or move messages, use Trash, and save drafts
-- Prepare messages, natural replies/reply-all, and quoted or attached forwards with reviewed To/CC/BCC, text/HTML, and bounded attachments
-- Send an immutable prepared payload with an exact digest and durable one-time dispatch claim
-- Restrict access to an explicit OAuth subject allowlist and separate read/write/send scopes
-- Self-host passkey OAuth on your own stable HTTPS domain, with client consent and Redis-backed token rotation/revocation
-- Read supported structured drafts, create append-only revisions, and prepare a reviewed draft for sending without changing the original
+Ask your agent to follow [Connect Your Assistant](https://angelos.ashray.xyz/docs/quickstart). It walks through your GitHub fork, Vercel deployment, Upstash database, mailbox, and assistant connection. Your agent handles setup and verification; you approve access and complete secure credential entry and passkey prompts.
 
-IMAP triage and conversation lookup are read-only: they fetch summaries and bounded selected headers, not message bodies, and do not mark mail read. Conversations use exact Message-ID/References/In-Reply-To links to a fixed anchor ID set, with no subject fallback or recursive expansion. Results do not claim mailbox-wide counts, urgency, or complete cross-folder threads. Read each exact reference for message content. Draft revision supports a strict structured MIME subset and appends a new draft while preserving the original. Unsupported or lossy MIME is rejected.
+Once connected, you can opt into [automatic release updates](https://angelos.ashray.xyz/docs/keep-updated).
 
-Provider capabilities affect which operations are safe to perform. Angelos does not manage Apple Mail's local rules, server-side filtering rules, or mailbox account settings. Existing clients should follow the [tool migration guide](./docs/src/content/docs/tool-migration.md). See the [tool reference](./docs/src/content/docs/tools.md) for the precise surface.
+## Email providers
 
-## Run and test
+- Spacemail, iCloud, Yahoo, and compatible TLS IMAP/SMTP services.
+- Gmail and Google Workspace via eligible app passwords or Google OAuth for personal/internal use.
+- Outlook.com and eligible Microsoft 365 primary mailboxes via delegated Microsoft Graph.
 
-Use the toolchain declared in [`go.mod`](./go.mod). Configure the required mailbox and OAuth environment variables from [Configuration](./docs/src/content/docs/configuration.md) and [OAuth reference](./docs/src/content/docs/oauth-reference.md), then:
-
-```bash
-go mod download
-go test -race -cover ./...
-go vet ./...
-go run .
-```
-
-Environment variables must be exported or injected by your runtime; the Go process does not automatically load `.env`. Never commit real credentials. The public server requires OAuth configuration even during development.
-
-## Deploy
-
-The root is a Vercel Go API project. The existing [`docs/`](./docs) site is a separate Astro/ZueDocs project published at <https://angelos.ashray.xyz>. Keep their project roots and environment variables separate. Follow [Connect Your Assistant](./docs/src/content/docs/quickstart.md) for the complete Vercel, Redis, mailbox, passkey, and assistant setup.
-
-## Safety boundaries
-
-The MCP host is trusted to obtain the owner's approval. Payload digests bind content; they do not prove a human approved it. Sending additionally requires a durable Redis REST store. Provider acceptance is not delivery, and uncertain outcomes must not be retried automatically. Read [Safety and concurrency](./docs/src/content/docs/safety.md) before granting full mailbox access. Permanent deletion is irreversible where supported; Gmail/Workspace and Microsoft Graph do not expose it.
+Provider and organization policies affect availability. See [provider setup](https://angelos.ashray.xyz/docs/quickstart#3-choose-your-mailbox-settings) for requirements and differences.
 
 ## Documentation
 
-```bash
-cd docs
-bun install --frozen-lockfile
-bun run check
-bun run build
-bun run dev
-```
-
-Run `check` before `build`. See [Writing docs](./docs/src/content/docs/writing-docs.md) for contribution guidance.
+[Inbox guide](https://angelos.ashray.xyz/docs/inbox-guide) · [Writing and sending](https://angelos.ashray.xyz/docs/sending-guide) · [Tools](https://angelos.ashray.xyz/docs/tools) · [Safety and permissions](https://angelos.ashray.xyz/docs/safety) · [Development](https://angelos.ashray.xyz/docs/testing) · [Changelog](https://angelos.ashray.xyz/docs/changelog)
 
 ## License
 
