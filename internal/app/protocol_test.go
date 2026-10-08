@@ -2,7 +2,10 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
@@ -25,6 +28,22 @@ func callProtocol(t *testing.T, a *App, payload string) map[string]any {
 		t.Fatal(e, w.Body.String())
 	}
 	return out
+}
+
+// Vercel may pass its public Host through a loopback connection to a function.
+// The MCP SDK's default local-server DNS-rebinding protection rejects such a
+// request before tools/list executes. Keep that protection on the default
+// handler; production can opt out only behind the separate canonical-host gate.
+func TestDefaultMCPTransportRejectsLoopbackWithPublicHost(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "https://api.angelos.ashray.xyz/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}))
+	w := httptest.NewRecorder()
+	(&App{}).Handler().ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden || !bytes.Contains(w.Body.Bytes(), []byte("Forbidden: invalid Host header")) {
+		t.Fatalf("expected SDK loopback DNS rebinding protection to reject public Host before discovery: HTTP %d %s", w.Code, w.Body.String())
+	}
 }
 func TestActualToolRegistryAndAnnotations(t *testing.T) {
 	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)

@@ -78,7 +78,14 @@ func newHandler() http.Handler {
 				if e == nil {
 					a := &app.App{Mail: backend, Config: mailConfig, EnableWrites: enabled("MAIL_ENABLE_WRITES"), EnableSend: enabled("MAIL_ENABLE_SEND"), EnableDelete: enabled("MAIL_ENABLE_DELETE"), AuthChallenge: gate.Challenge}
 					configureStore(a)
-					mcpHandler = gate.Middleware(a.Handler())
+					transport := a.Handler()
+					if firstParty {
+						// The Vercel function receives public-host HTTPS traffic over a
+						// loopback hop. The outer canonicalHost gate below enforces
+						// the exact trusted public hostname before this MCP transport.
+						transport = a.HandlerBehindCanonicalHostGate()
+					}
+					mcpHandler = gate.Middleware(transport)
 					configured = true
 				}
 			}

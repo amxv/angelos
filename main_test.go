@@ -1,17 +1,73 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"github.com/amxv/angelos/internal/app"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// Vercel routes the public HTTPS hostname into a loopback Go function. The
+// default SDK handler correctly protects localhost, while our first-party
+// transport can accept that hop only behind strict canonical-host validation.
+// This exercises the real six-tool discovery wire response, not mail actions.
+func TestFirstPartyCanonicalHostAllowsLoopbackMCPDiscovery(t *testing.T) {
+	h := canonicalHost((&app.App{}).HandlerBehindCanonicalHostGate())
+	request := func(host, forwardedHost, forwardedProto string) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "https://api.angelos.ashray.xyz/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+		r.Host = host
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		r.Header.Set("MCP-Protocol-Version", "2025-11-25")
+		r.Header.Set("X-Forwarded-Host", forwardedHost)
+		r.Header.Set("X-Forwarded-Proto", forwardedProto)
+		r.Header.Set("Forwarded", `for=127.0.0.1;host=attacker.example;proto=http`)
+		return r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}))
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, request("api.angelos.ashray.xyz", "api.angelos.ashray.xyz", "https"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("legitimate Vercel loopback transport rejected: HTTP %d %s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Result struct {
+			Tools []struct {
+				Name            string          `json:"name"`
+				SecuritySchemes json.RawMessage `json:"securitySchemes"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || len(response.Result.Tools) != 6 {
+		t.Fatalf("missing six-tool discovery: %v %s", err, w.Body.String())
+	}
+	for _, tool := range response.Result.Tools {
+		if len(tool.SecuritySchemes) == 0 {
+			t.Fatalf("%s lost OAuth discovery metadata", tool.Name)
+		}
+	}
+	for _, bad := range []struct{ host, forwardedHost, forwardedProto string }{
+		{"attacker.example", "attacker.example", "https"},
+		{"api.angelos.ashray.xyz:443", "api.angelos.ashray.xyz", "https"},
+		{"api.angelos.ashray.xyz", "attacker.example", "https"},
+		{"api.angelos.ashray.xyz", "api.angelos.ashray.xyz", "http"},
+	} {
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, request(bad.host, bad.forwardedHost, bad.forwardedProto))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("untrusted public host/forwarding passed gate: %q %q %q HTTP %d", bad.host, bad.forwardedHost, bad.forwardedProto, w.Code)
+		}
+	}
+}
 
 func TestFirstPartyMountsDiscoveryAndProtectsMCP(t *testing.T) {
 	// Disposable generated key is a local test fixture, never runtime behavior.

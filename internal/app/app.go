@@ -215,8 +215,26 @@ func (a *App) sendStatus(ctx context.Context, id string) (any, error) {
 	return out, nil
 }
 func (a *App) Handler() http.Handler {
+	return a.streamableHandler(false)
+}
+
+// HandlerBehindCanonicalHostGate is for the first-party HTTPS deployment only.
+// Vercel forwards public requests over loopback, so the Go MCP SDK's local-only
+// DNS-rebinding check would reject even a valid canonical Host with HTTP 403.
+// Call this ONLY behind the outer canonicalHost middleware, which independently
+// validates the exact public Host and the platform's forwarding headers. Other
+// deployments retain the SDK's default localhost protection via Handler().
+func (a *App) HandlerBehindCanonicalHostGate() http.Handler {
+	return a.streamableHandler(true)
+}
+
+func (a *App) streamableHandler(behindCanonicalHostGate bool) http.Handler {
 	s := a.Server()
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: 8 << 20, PropagateRequestCancellation: true})
+	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s }, &mcp.StreamableHTTPOptions{
+		Stateless: true, JSONResponse: true, MaxRequestBodyBytes: 8 << 20,
+		PropagateRequestCancellation: true,
+		DisableLocalhostProtection:   behindCanonicalHostGate,
+	})
 }
 
 // Sent filing is an IMAP mutation, separate from SMTP submission authority.
