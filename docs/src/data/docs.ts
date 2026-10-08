@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "Angelos",
-  strapline: "A little less inbox.",
+  strapline: "Greek for “messenger.”",
   description: "Connect your AI agent to your existing mailbox. Find what needs attention, understand conversations, and prepare thoughtful replies with Angelos.",
   repoUrl: "https://github.com/amxv/angelos",
   logoHref: "/favicon.svg",

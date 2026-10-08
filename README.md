@@ -1,5 +1,7 @@
 # Angelos
 
+*Greek for “messenger.”*
+
 Your inbox, connected to your AI assistant.
 
 Angelos is a self-hosted email MCP server for ChatGPT, Claude, and other compatible clients. It lets your assistant read, search, organize, draft, reply, and send using your existing email account.
