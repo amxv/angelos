@@ -91,9 +91,21 @@ MAIL_PASSWORD=YOUR_GOOGLE_APP_PASSWORD
 
 This must be an actual [Google app password](https://support.google.com/accounts/answer/185833), not your normal Google password. Availability depends on two-step verification and account/admin policy. Do not weaken organization security settings to enable it.
 
-If app passwords are unavailable, your agent can prepare the Google OAuth route. After any required project/access approvals, it configures your Google Cloud project's audience, consent screen, `https://mail.google.com/` scope, and a Web application OAuth client with `https://developers.google.com/oauthplayground` as its exact redirect URI. It must reuse a suitable existing client rather than create duplicates.
+If app passwords are unavailable, your agent can prepare Google's OAuth route using the repository's local helper. The agent handles setup and token exchange; you enter the private client secret and approve the mailbox grant.
 
-**You complete** the private credential entry and mailbox consent in the [official OAuth Playground](https://developers.google.com/oauthplayground/), using your own OAuth credentials, server-side flow, and offline access. Exchange the code for a refresh token and transfer it securely to the API project. Creating persistent credentials or granting full-mail access requires your approval; the agent cannot bypass Workspace administrator policy. Then configure:
+1. After the required project/access approvals, the agent configures or reuses your Google Cloud project, audience/consent screen, `https://mail.google.com/` scope, and **Web application** OAuth client. It registers exactly `http://127.0.0.1:8401/callback` as an authorized redirect URI. For an External Testing app, add your intended mailbox as a test user. Creating persistent credentials and granting full-mail access need your approval; organization policy still applies.
+2. The agent verifies that the **Gmail API is enabled in this same Google Cloud project before consent**. The helper uses its profile endpoint to confirm the intended mailbox, even though Angelos itself uses IMAP/SMTP. An API-disabled or administrator-blocked profile check cannot be skipped. [Gmail API prerequisite](https://developers.google.com/workspace/gmail/api/quickstart/python)
+3. On your approved Linux/macOS computer with Python 3.9 or newer, the agent prepares a private owner-only `0700` directory outside every repository, then runs this command from the checkout. The output filename must be new:
+
+```bash
+python3 scripts/google_grant.py \
+  --client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
+  --mailbox you@gmail.com \
+  --output "$HOME/.angelos-private/google.env"
+```
+
+4. You enter the client secret at the private terminal prompt and open the Google consent URL in a browser on that same computer. The helper checks state and PKCE, exchanges the code once, and verifies the exact full-mail scope and intended primary mailbox. It writes the settings below to a protected `0600` file without printing tokens. Keep the callback URL private; do not copy it into chat, screenshots, or support logs.
+5. Transfer the resulting settings to Vercel Production through the approved secure route in step 4 below. The file is a JSON-quoted dotenv reference: **do not source or execute it**; enter decoded values without surrounding quotes. Never attach or display the file in chat. The helper supports `--client-secret-file` for an already protected owner-only secret file instead of terminal entry.
 
 ```dotenv
 MAIL_PROVIDER=gmail
@@ -105,7 +117,7 @@ GOOGLE_CLIENT_SECRET=YOUR_CLIENT_SECRET
 GOOGLE_REFRESH_TOKEN=YOUR_REFRESH_TOKEN
 ```
 
-Remove `MAIL_PASSWORD` in OAuth mode. The grant includes full IMAP/SMTP mail access even though Angelos starts read-only. External Testing grants can expire after seven days; Workspace policy and restricted-scope rules still apply. Playground receives the credentials you enter. The [Gmail reference](/docs/gmail-workspace) explains audience, expiry, and verification requirements before you choose this route.
+Remove `MAIL_PASSWORD` in OAuth mode. This grants full IMAP/SMTP mail access even though Angelos starts read-only. External Testing grants can expire after seven days; Workspace policy and restricted-scope rules still apply. If an existing grant no longer works, repeat the approved local flow with a new output filename and update the production secret securely. The [Gmail reference](/docs/gmail-workspace) explains eligibility, expiry, and verification requirements. No account or grant is created merely by installing the helper.
 
 ### Outlook.com and Microsoft 365
 
@@ -263,6 +275,7 @@ Expect `configured: true` in health, your exact issuer and `/mcp` resource in di
 1. Open `https://my-angelos.vercel.app/oauth/login` in your browser, on the exact domain you configured.
 2. Enter the contents of `bootstrap-token.txt` in the enrollment form. Complete the browser’s passkey prompt using your password manager, device, or security key.
 3. Open `/oauth/grants` while signed in and add a **second independent authenticator**. Sign in with each to check it works. If your session is no longer recent, sign in again before adding a passkey.
+
 **Agent does, after verifying enrollment:** remove `ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH` from Vercel with the required approval and redeploy Production again. Keep Redis’s consumed-enrollment state. Remove the local bootstrap token and hash files only with appropriate deletion approval after successful enrollment; keep the signing key securely backed up.
 
 There is no public signup or email/password reset. Losing every passkey needs deliberate offline recovery; clearing Redis is not a safe reset. [Recovery and revocation reference](/docs/oauth-reference#owner-recovery)
@@ -305,9 +318,9 @@ Read [Safety and permissions](/docs/safety) first. Change the relevant Vercel va
 
 - **Organize mail or save new drafts:** `MAIL_ENABLE_WRITES=1` and `mail.write` permission.
 - **Prepare and send messages:** `MAIL_ENABLE_SEND=1` and `mail.send` permission. Redis is already configured. Review the full prepared recipients, body, and attachments before sending. Preparation alone does not send mail.
-- **Permanent deletion:** keep `MAIL_ENABLE_DELETE=0` unless you deliberately need it. It also requires writes and safe provider support; Gmail permanent deletion is unavailable.
+- **Permanent deletion:** keep `MAIL_ENABLE_DELETE=0` unless you deliberately need it. It also requires writes and safe provider support; Gmail and Microsoft Graph permanent deletion are unavailable.
 
-Start with disposable messages. Gmail saves its own Sent copy, so use `append_sent: false`; other providers require write permission if you request an extra Sent copy. Sending approval belongs to the trusted assistant client; OAuth consent is not approval of an individual email. If a send result is uncertain, inspect its receipt instead of sending a replacement. SMTP acceptance is not confirmed delivery.
+Start with disposable messages. Gmail and Microsoft Graph save their own Sent copy, so use `append_sent: false`; other providers require write permission if you request an extra Sent copy. Sending approval belongs to the trusted assistant client; OAuth consent is not approval of an individual email. If a send result is uncertain, inspect its receipt instead of sending a replacement. Provider acceptance or queueing is not confirmed delivery.
 
 ## Troubleshooting
 

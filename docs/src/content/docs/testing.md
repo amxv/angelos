@@ -39,6 +39,10 @@ Status/search regressions cover signed OAuth principal isolation and challenges,
 
 Gmail tests use synthetic Google-host TLS certificates and injected loopback transports, never real accounts or refresh grants. Coverage includes IMAP with/without SASL-IR, SMTP TLS/STARTTLS, exact XOAUTH2 payloads, challenge termination, no credential downgrade, verified TLS before credentials, token refresh expiry/cancellation/concurrency/response bounds/redaction, and generation-safe invalidation. Signed MCP fixtures verify duplicate-Sent rejection before claim, one SMTP dispatch without explicit Sent APPEND, deletion guards, localized LIST roles, native MOVE requirements, and preserved legacy-provider behavior.
 
+## Google initial-grant helper fixtures
+
+Run `python3 -m unittest discover -s scripts -p 'test_google_grant.py' -v` for the local helper's synthetic tests. They exercise S256 PKCE and state, one-time loopback callback/code exchange, pinned endpoints, response deadlines and limits, exact full-mail scope and expected-mailbox verification, secret-safe errors including Gmail API unavailable/denied, and exclusive private output. No real grant, API enablement, mailbox access, or live consent is performed. The helper's Gmail API profile check is separate from the existing IMAP/SMTP runtime tests.
+
 ## Microsoft Graph fixtures
 
 Graph tests use synthetic HTTPS transports and mailbox data, never a real Microsoft account. They cover folder-tree discovery/create/rename, bounded raw MIME reads and attachments, structured drafts with Bcc/HTML/attachments, full draft retrieval beyond display truncation, rejection of semantic MIME changes while allowing explicitly inert Exchange transport metadata, filtered search and cursor integrity, native references, move/Seen changes, and exact prepared/send bytes with unknown outcomes after a lost response. Copy and Trash share the transfer implementation; synthetic coverage is not a separate live validation of each operation.

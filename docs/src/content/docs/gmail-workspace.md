@@ -1,7 +1,7 @@
 ---
 title: Gmail and Google Workspace
 description: Configure one Gmail-enabled mailbox with server-side XOAUTH2 and conservative Gmail-specific safeguards.
-summary: Personal/internal Gmail compatibility, separate OAuth planes, manual grant setup, and provider limits.
+summary: Personal/internal Gmail compatibility, separate OAuth planes, local secure grant setup, and provider limits.
 order: 24
 category: Reference
 ---
@@ -39,21 +39,15 @@ The secret fields above are deliberately blank; supply the owner-provisioned val
 
 The server refreshes access tokens at Google's fixed HTTPS token endpoint, caches them only within the backend instance, and honors returned expiry. Refresh requests are bounded, redirects are denied, and errors exclude credentials, tokens and provider response bodies. Authentication happens only after verified TLS and advertised XOAUTH2 support. An OAuth failure never downgrades to a password or retries an email send.
 
-## Manual offline grant setup
+## Local offline grant setup
 
-The owner or Workspace administrator must decide which Google project, OAuth audience, client, and mailbox grant are appropriate. No grant is created by installing or configuring Angelos.
+Use the executable `scripts/google_grant.py` flow in [Connect Your Assistant](/docs/quickstart#gmail-or-google-workspace). The agent prepares the permitted project/client and runs the helper on the approved computer; the owner enters credentials securely and completes Google's consent. Installing Angelos does not create a grant or authorize project changes.
 
-One official manual route, without adding a callback endpoint to Angelos:
+The helper uses a confidential Web application with the exact registered loopback redirect `http://127.0.0.1:8401/callback`, S256 PKCE, single-use state, offline access, and only `https://mail.google.com/`. Google permits HTTP localhost IP redirects for this flow. It exchanges the authorization code directly with Google's fixed token endpoint, then checks the intended primary address through Gmail `users/me/profile`. The same Cloud project must have the Gmail API enabled for this identity check; API-disabled or administrator-denied responses fail setup with guidance. [Redirect validation](https://developers.google.com/identity/protocols/oauth2/web-server#redirect-uri-validation), [Gmail API setup](https://developers.google.com/workspace/gmail/api/quickstart/python)
 
-1. Configure the project's Google Auth Platform audience/consent information and a Web application OAuth client. For an External audience, declare `https://mail.google.com/` under Data Access. If the publishing status is Testing, add the intended mailbox under Audience → Test users. [Consent setup](https://developers.google.com/workspace/guides/configure-oauth-consent)
-2. Register exactly `https://developers.google.com/oauthplayground` as an authorized redirect URI, without a trailing slash.
-3. In [Google OAuth Playground](https://developers.google.com/oauthplayground/), select Google endpoints, Server-side, Offline, and Use your own OAuth credentials.
-4. The owner enters the matching client credentials, authorizes only `https://mail.google.com/` as the intended mailbox, and exchanges the authorization code in Step 2.
-5. The owner securely provisions the returned refresh token and matching credentials on Angelos. No Playground Step 3 API request or Angelos callback UI is needed.
+The output is a new owner-only file outside Git, containing the verified mailbox and `GOOGLE_*` settings. Do not source it, print it, attach it, or copy the callback URL into chat. Transfer decoded values through the approved secure deployment route. Missing refresh tokens, a different mailbox, or missing/extra granted scopes stop the helper; no partial configuration is saved. No owner needs to copy an authorization code or operate OAuth Playground for this path.
 
-Playground states that entered credentials pass through its proxy server. Credential entry, consent and server provisioning must therefore remain owner-manual. Do not share Playground links that contain tokens. Using your own credentials avoids Playground's default-client 24-hour token revocation; it does not remove Google's other expiry or policy restrictions. [Official Playground walkthrough](https://developers.google.com/admob/api/v1/how-tos/playground), [offline access](https://developers.google.com/identity/protocols/oauth2/web-server#offline)
-
-This setup uses IMAP/SMTP rather than the Gmail REST API. Follow the requirements shown for the actual project and consent configuration; Angelos has no OAuth callback URL to register.
+This profile check does not change the runtime transport: mail still uses IMAP/SMTP, with the same Gmail-specific safeguards below. The callback runs only on the owner's computer while the helper is active; no public Google callback endpoint is added to Angelos. Consent restrictions and token expiry remain Google's decisions.
 
 ## Workspace and consent restrictions
 
