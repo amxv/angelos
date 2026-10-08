@@ -180,6 +180,9 @@ func (b *Browser) loginPage(w http.ResponseWriter, r *http.Request) {
 		browserStateError(w, err)
 		return
 	}
+	b.renderLogin(w, r, session)
+}
+func (b *Browser) renderLogin(w http.ResponseWriter, r *http.Request, session *browserSession) {
 	_, owner, err := b.loadOwner(r)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		browserError(w, 503, "Authentication state unavailable.")
@@ -214,7 +217,13 @@ func (b *Browser) BeginAuthorization(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 	if session.Subject == "" {
-		http.Redirect(w, r, "/oauth/login", http.StatusSeeOther)
+		// A hosted client can follow redirects before opening the final URL in
+		// the owner's browser. A bare /oauth/login redirect loses the request
+		// when that browser does not share the client's cookie jar. Keep the
+		// validated authorization URL as the entrypoint so the actual browser
+		// creates its own session-bound pending consent. Reuse this session:
+		// calling loginPage would create a second cookie on a cookie-less GET.
+		b.renderLogin(w, r, session)
 		return
 	}
 	http.Redirect(w, r, "/oauth/consent?request="+id, http.StatusSeeOther)

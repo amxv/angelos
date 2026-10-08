@@ -34,6 +34,10 @@ Authorization requires owner sign-in and explicit consent identifying the actual
 
 Open `/oauth/grants` to review and revoke connected grants. Revocation invalidates the grant for refresh and subsequent authenticated MCP requests, even if an issued access JWT has time remaining. Refresh-token replay also revokes the affected grant. Redis failure denies grant validation rather than allowing cached-token access. This does not cancel a mailbox operation that already passed authentication, undo a completed mail action, or make an ambiguous send safe to retry.
 
+For a new connection, the assistant starts at `/oauth/authorize`. If sign-in is needed, Angelos renders it at that same validated URL so client-side prefetch or a browser handoff cannot strip the authorization request by following a redirect to a bare login page. The actual browser creates its own cookie-bound pending consent; successful passkey sign-in rotates its session and continues to the requested client's consent page. No code or grant is issued until approval.
+
+Opening `/oauth/login` directly is for owner sign-in and connected-client management; it does not start a new assistant grant or accept a return URL. If an interrupted or older connection attempt ends at connected-client management, restart **Connect** in the assistant. Refreshing the original authorization URL starts a fresh pending request; old, expired, and other-session consent IDs remain invalid. Browsers must allow the first-party session cookie.
+
 Logout ends the current browser session; revoke the connected grant to withdraw a client's API access. OAuth consent is a permission grant to a client, not approval of any particular outgoing email, deletion, or mailbox modification. The trusted client remains responsible for per-action approval and prepared-message review.
 
 ## Protocol and token contract

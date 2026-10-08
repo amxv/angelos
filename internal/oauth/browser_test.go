@@ -582,7 +582,7 @@ func (h *browserHarness) authorize(scopes string) (string, string) {
 	c := h.browser.server.config.Clients[0]
 	params := url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "resource": {h.browser.server.config.Resource}, "state": {"opaque-client-state"}, "scope": {scopes}, "code_challenge": {b64(digest[:])}, "code_challenge_method": {"S256"}}
 	response := h.get("/oauth/authorize?" + params.Encode())
-	if response.Code != 303 {
+	if response.Code != http.StatusOK && response.Code != http.StatusSeeOther {
 		h.t.Fatalf("authorize: %d %s", response.Code, response.Body)
 	}
 	raw, err := h.store.Get(context.Background(), "session", h.cookie.Value)

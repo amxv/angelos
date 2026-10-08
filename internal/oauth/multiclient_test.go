@@ -55,7 +55,7 @@ func multiClientCode(t *testing.T, s *Server, clientID string, scopes []string) 
 		"response_type": {"code"}, "code_challenge": {a.Challenge}, "code_challenge_method": {"S256"}, "scope": {strings.Join(scopes, " ")}}
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", s.config.Issuer+"/oauth/authorize?"+p.Encode(), nil))
-	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/oauth/login" {
+	if w.Code != http.StatusOK || w.Header().Get("Location") != "" || !strings.Contains(w.Body.String(), "Owner sign-in") {
 		t.Fatal("public-client authorization did not require owner sign-in", w.Code, w.Header(), w.Body.String())
 	}
 	// Simulate owner consent through the same trusted boundary exercised by
@@ -111,6 +111,10 @@ func multiClientMCP(t *testing.T, s *Server) func(string, string) *httptest.Resp
 // Include the browser session CAS operation needed by authorize, alongside the
 // core token/grant fixture. No production store is replaced by this test double.
 type multiClientMemoryStore struct{ *coreMemoryStore }
+
+func (m *multiClientMemoryStore) LoadOwner(context.Context) ([]byte, error) {
+	return nil, ErrNotFound
+}
 
 func (m *multiClientMemoryStore) CompareAndSwap(_ context.Context, bucket, id string, old, next []byte, _ time.Duration) (bool, error) {
 	m.mu.Lock()
