@@ -1,14 +1,36 @@
 ---
-title: Migration and token budget
-description: Upgrade existing MCP clients to the compact six-tool interface without losing operations or safety information.
-summary: Six tools now cover 25 operations, with compact message results and read-only inbox workflows.
+title: Client migration and token budget
+description: Upgrade saved MCP calls safely and measure the complete discovery and response cost.
+summary: Durable client compatibility rules, legacy call mapping, and reproducible size checks.
 order: 45
 category: Reference
 ---
 
-New integrations can start with the [agent guide](/docs/agent-guide); this page is for upgrading existing clients and measuring their discovery cost.
+Use this page to upgrade an existing client or measure its discovery overhead. For release-by-release features, fixes, and historical measurements, read the [Changelog](/docs/changelog). New integrations should start with the [Agent playbook](/docs/agent-guide) and [tool reference](/docs/tools).
 
-The **0.2.0** release introduced the breaking tool-name/input-layout change below. Versions **0.3.0**, **0.4.0**, **0.5.0**, **0.6.0**, **0.7.0**, **0.8.0**, and **0.9.0** retain those six names and add the features described at the end of this guide. Refresh `tools/list` and update saved workflows; removed names are not registered as aliases because aliases would preserve their discovery cost. The 0.2 tool regrouping did not change mailbox authentication, provider configuration, the send store, or existing prepared IDs/digests. Later additions are described below.
+<!-- Preserve historical deep links; release notes now live in the changelog. -->
+<span id="version-06-discovery-measurement"></span>
+<span id="version-03-preparation-additions"></span>
+<span id="version-04-lookup-additions"></span>
+<span id="version-05-gmailworkspace-compatibility"></span>
+<span id="version-06-inbox-workflows"></span>
+<span id="version-07-bounded-reads-and-classified-errors"></span>
+<span id="first-party-oauth-and-chatgpt-discovery"></span>
+<span id="version-08-structured-saved-drafts"></span>
+<span id="version-08-discovery-measurement"></span>
+<span id="version-09-first-use-clarity-and-safe-body-edits"></span>
+<span id="version-09-discovery-measurement"></span>
+<span id="version-010-personal-instances-and-microsoft-graph"></span>
+
+## Upgrade checklist
+
+1. **Refresh `tools/list` from the deployed revision.** Update cached schemas and saved workflows. Do not infer support from an old client description or call removed tool names.
+2. **Preserve exact references.** IMAP references use folder/UIDVALIDITY/UID. Microsoft Graph references contain provider/account/native IDs; preserve the complete returned object instead of inventing IMAP values. Discover folder IDs and capabilities before choosing an operation.
+3. **Check scopes and gates independently.** A code upgrade does not enable mailbox writes, sending, or deletion, and cannot add scopes to an existing token or grant. A deliberate broader connection needs server configuration plus new owner consent. Provider limitations still apply.
+4. **Preserve identity and durable state.** Keep the production origin, owner subject, signing key, provider token-encryption key when configured, and Redis. Changes to issuer/resource/subject affect owned preparations and receipts; follow [OAuth migration](/docs/oauth-reference#migrate-from-an-external-issuer) rather than treating inaccessible status as proof of no send.
+5. **Verify without changing mail first.** Check discovery, capabilities, intended folders, and an owner-selected read. Only test mutations or sending with explicit approval and disposable content. See [testing](/docs/testing) for the verification boundary.
+
+The server exposes six risk-separated tools for 25 operations. The breaking 0.2 regrouping removed legacy aliases; the mapping below remains useful for clients upgrading from that interface. Later release-specific action requirements belong in the [changelog](/docs/changelog), with exact current behavior in the [tool reference](/docs/tools).
 
 ## Operation parity
 
@@ -44,45 +66,14 @@ For example, the exact full read is now:
 
 Reference values are illustrative, not reusable mailbox identifiers.
 
-## Discovery and response cost
+## Behavior to preserve in saved workflows
 
-The table below is a historical version 0.2 snapshot, not a version 0.6 measurement. Re-run the metric checks on the exact revision when assessing current discovery cost.
-
-The baseline is the actual `tools/list` tools array from commit `21269903054ca3e7331e80fa46fce9325bd40b65` (same Go interface as 0.1.0), captured through the real stateless MCP HTTP handler. The checked-in baseline fixture and `TestToolSchemaTokenBudget` make the comparison reproducible.
-
-| Measurement | Before | After | Reduction |
-| --- | ---: | ---: | ---: |
-| Registered tools | 17 | 6 | 64.7% |
-| Complete tool-definition JSON bytes | 14,886 | 8,770 | 41.1% |
-| Input schemas alone, JSON bytes | 7,695 | 5,490 | 28.7% |
-| Approximate discovery tokens, ceil(bytes / 4) | 3,722 | 2,193 | 41.1% |
-| Representative 25-message search payload bytes | 7,567 | 6,159 | 18.6% |
-| Representative 18KB-text read payload bytes | 18,501 | 4,685 | 74.7% |
-
-These are compact UTF-8 JSON measurements, without transport framing. The discovery measurement includes descriptions, annotations, scope metadata, and input schemas, not just the input fields. The response measurements are logical JSON payloads from deterministic synthetic fixtures in `response_test.go`, not live private mail. MCP may include the same output in both text content and structured content; client context use varies.
-
-The bytes-divided-by-four number is only a disclosed estimate, **not an actual tokenizer count or a billing prediction**. Tokenization varies with the model, language, addresses, and message content. Full-detail responses retain their original information and can still be large. Base64 attachments and exact prepared-send previews are deliberately not abbreviated.
-
-Run the metric checks with:
-
-```bash
-go test ./internal/app -run 'TestToolSchemaTokenBudget|TestSearchSummaryLossless|TestReadSummaryPreservesSafetyAndFullText' -v
-```
-
-The version 0.2 discovery test enforced a ceiling of 65% of baseline size, providing room for small safety clarifications while preventing accidental return to the old overhead. The later version 0.7 and OAuth compatibility budgets are described below. Per-action requirements are concise schema descriptions plus strict server-side key checks, rather than large repeated union branches. Clients should use the declared `action` enum and only its documented fields; every call still receives typed JSON Schema validation.
-
-### Version 0.6 discovery measurement
-
-The version 0.6 implementation passes `TestToolSchemaTokenBudget` against the same version 0.1 baseline, with the unchanged 65% discovery-size ceiling. Six tools now cover 21 operations.
-
-| Measurement | Baseline | Version 0.6 | Reduction |
-| --- | ---: | ---: | ---: |
-| Registered tools | 17 | 6 | 64.7% |
-| Complete tool-definition JSON bytes | 14,886 | 9,661 | 35.1% |
-| Input schemas alone, JSON bytes | 7,695 | 6,457 | 16.1% |
-| Approximate discovery tokens, ceil(bytes / 4) | 3,722 | 2,416 | 35.1% |
-
-These are measured compact UTF-8 JSON bytes and a bytes-based token estimate, not tokenizer counts. The earlier search/read payload measurements remain historical fixtures; this table makes no claim about triage or conversation response sizes. Re-run the test after any schema or tool-description change.
+- Use the declared `action` and only its documented fields. Unknown, irrelevant, and unsupported null inputs fail before mailbox access. Optional `search.unread` and `search.flagged` retain their documented null-as-omitted behavior.
+- For derived replies, omitted recipients may be filled from source metadata; explicit arrays replace them and empty arrays clear them. Reply quotation is enabled by default. Review the complete derived message rather than assuming a prior compact read was an approval preview.
+- For saved drafts, use the dedicated draft read and exact source digest. A revision appends a new draft; it does not edit the original in place. When both authored body alternatives exist, explicitly set or clear both `changes.text` and `changes.html`. Reread/review after a digest conflict.
+- Treat triage counts as page-only and related-message results as bounded same-folder evidence. Follow returned continuation; never infer complete threads, mailbox totals, or message bodies from summaries.
+- Use `append_sent: false` with Gmail and Microsoft Graph. Inspect actual provider capabilities before permanent deletion, conversation traversal, or conditional flags; a configured switch does not add provider support.
+- Inspect send status after uncertainty. Missing, expired, or inaccessible status is not permission to prepare a replacement or resend.
 
 ## Safety and completeness
 
@@ -93,95 +84,38 @@ Compact search pages retain cursor/freshness information, UIDVALIDITY, UID, flag
 Mutation errors retain partial outcomes and `retry_safe`; ambiguous writes and send outcomes must not be retried blindly. To/Cc/Bcc, full message text, attachment hashes, immutable digests, expiry, durable one-time claims, and the separate Sent-filing permission check are unchanged. Grouping tools does not grant permission to send or mutate mail.
 
 
-## Version 0.3 preparation additions
+## Discovery and response cost
 
-Refresh discovery again for `mail_prepare` action `reply_all`, optional authored HTML, quotation control, selected source attachment indexes, and quoted/EML/omitted-original forward modes. The six tool names and all earlier operation routes remain available.
+Measure the exact revision and output shape you ship. Counting only input schemas hides descriptions, annotations, and OAuth metadata; counting tools alone hides result size and extra round trips. The complete `tools/list` tools array is the discovery fixture, without JSON-RPC transport framing.
 
-For replies, omitted To/Cc can now be derived from complete source metadata and configured self aliases. Explicit arrays keep replacement semantics; `[]` clears a field and `null` is rejected. Reply quotations are now included by default; set `quote_original: false` to retain an authored-body-only reply. Existing explicitly supplied recipients, full previews, approval digests, and consumed-send behavior remain intact. Review both body alternatives before sending.
+### Reproduce the checks
 
-See [Reply and forward details](/docs/natural-messages) for exact behavior and privacy limits. The version 0.2 size measurements above are historical snapshots; additional version 0.3 functionality remains covered by the repository's compact discovery regression budget.
+From the repository root, with the declared Go toolchain:
 
+```bash
+go test ./internal/app -run 'TestToolSchemaTokenBudget|TestToolSchemaReleaseSnapshot|TestDiscoveryUsabilityAndSize|TestSearchSummaryLossless|TestReadSummaryPreservesSafetyAndFullText' -v
+```
 
-## Version 0.4 lookup additions
+`TestToolSchemaTokenBudget` captures the real stateless MCP HTTP handler and reports complete UTF-8 JSON bytes plus input-schema bytes. `TestToolSchemaReleaseSnapshot` checks the complete current discovery output against the reviewed release fixture. Review intentional schema changes and their measured impact before updating that snapshot; never replace a baseline just to make a regression pass.
 
-Refresh discovery for `mail_query` action `send_status` (`prepared_id`), and optional search `message_id`/`participant` filters. There are six tools and 19 operations. Default searches and their existing cursor serialization are preserved; new filter values bind their cursors. Exact-ID search verifies complete case-preserved headers, while participant search is explicitly a substring operator across visible address fields.
+### Current comparison and budget
 
-Send-status inspection is read-only, requires `mail.read` plus `mail.send`, and works with a valid store even when sends are disabled. New records bind ownership to the verified issuer/resource/subject. Older unowned receipts remain unavailable to this new lookup; their existing exact-ID/digest send behavior and TTLs are unchanged. See the [receipt reference](/docs/tools#inspect-a-send-receipt-without-sending) and [ownership model](/docs/oauth-reference#preparation-ownership).
+The maintained fixture is `tools-list-v0.10.0.json`. The strict snapshot test verifies that the current implementation matches it exactly. The original 0.1 fixture comes from [commit 2126990](https://github.com/amxv/angelos/commit/21269903054ca3e7331e80fa46fce9325bd40b65). Re-run the command above after any schema, description, or OAuth-metadata change.
 
+| Measurement | Original 0.1 baseline | Maintained fixture |
+| --- | ---: | ---: |
+| Registered tools | 17 | 6 |
+| Complete discovery JSON bytes | 14,886 | 11,742 |
+| Input-schema JSON bytes | 7,695 | 8,293 |
 
-## Version 0.5 Gmail/Workspace compatibility
+The structural regression limit is 70% of the original complete baseline plus separately bounded allowances of 768 bytes for the draft lifecycle and 512 bytes for Graph references. The duplicated top-level OAuth metadata has a separate 512-byte cap. This is an explicit growth budget, not a claim that current complete discovery is below 70% of the original baseline.
 
-The six tools and 19 operations remain unchanged. Refresh discovery for Gmail-specific constraints. `MAIL_PROVIDER=gmail` defaults to server-side Google XOAUTH2; existing Spacemail/custom password configurations remain valid. Google mailbox OAuth is separate from MCP-client OAuth and requires owner-provisioned credentials. See [Gmail and Google Workspace](/docs/gmail-workspace) for setup and public-verification limits.
+The complete wire shape includes identical top-level and `_meta.securitySchemes` declarations. Do not remove one to claim a size reduction: clients may rely on either. A local `$ref`-expanded comparison is also guarded against the preserved 0.8 fixture; expanded forms and original wire bytes are different measurements.
 
-Capabilities now include `server.gmail_labels`, `server.permanent_delete`, and `server.smtp_stores_sent`, plus top-level `smtp_stores_sent` and an applicable `permanent_delete_restriction`. Top-level `permanent_delete_enabled` reflects write/delete gates and safe provider support, rather than only the configured delete switch. UID EXPUNGE support alone does not imply Gmail permanent-delete availability.
+### Interpret the results honestly
 
-Gmail callers must pass `append_sent: false`; true is rejected before claim/SMTP. Gmail permanent deletion is disabled regardless of the gate. Special roles are discovered from LIST attributes even when SPECIAL-USE is not advertised; All Mail is not guessed as Archive. No Gmail label or raw-search dialect is added.
+Compact UTF-8 JSON size is **not an actual tokenizer count or a billing prediction**. A bytes-divided-by-four estimate must be labeled as an estimate; tokenization varies with model, language, addresses, and content. Clients can expand references, duplicate text/structured content, or transform discovery before adding it to context.
 
+Response tests use deterministic synthetic messages, not live private mail. Summary mode bounds selected output and links to fuller reads; it does not justify dropping warnings, truncation indicators, exact identifiers, or continuation. Full-detail responses can still be large. Attachment bytes and exact prepared-send previews are deliberately not abbreviated.
 
-## Version 0.6 inbox workflows
-
-Refresh discovery for `mail_query` actions `triage` and `conversation`, and the optional search boolean `attention`. The six tool names now cover 21 operations; earlier routes, permission boundaries, scopes, and gates remain unchanged.
-
-- `triage` accepts optional `search` and `detail`. It forces `(unread OR flagged) AND other supplied filters`, rejecting explicit `attention: false`. Explicit `unread` or `flagged` filters remain AND constraints. The result adds `selection` and overlapping `page_counts` for returned rows only: `messages`, `unread`, `flagged`, and `unread_and_flagged`. These are neither folder totals nor urgency scores.
-- Ordinary `search` accepts `attention: true` with the same selection and no triage-specific counts. Omission/false preserves earlier search behavior and cursor serialization. Cursors from searches that predate the field remain valid with their original filters/order.
-- `conversation` requires an exact `reference`; optional `search` permits only `folder`, `order`, `cursor`, and `limit`. The folder must be empty/omitted or match the anchor exactly. Its result adds `anchor` and `coverage` to compact/full summary rows. It fixes the ID set from the anchor's Message-ID, References, and In-Reply-To and matches same-folder header tokens exactly, preserving case. It never expands recursively or matches by subject.
-
-Both new actions use a default limit of 25, maximum 100 rows, and at most one 1000-UID scan window per call. Both are read-only and fetch no message bodies or change Seen. Continue on empty pages when a cursor is present. Conversation cursors are separate from search/triage cursors and bind the operation, exact anchor, seed digest, order, mailbox generation, and frozen upper UID bound. New arrivals need a fresh lookup.
-
-Selected conversation headers are bounded to 64 KiB, 100 IDs, and 1024 bytes per ID. The server-side header prefilter also has a conservative 64 KiB encoded-query cap; exact local verification remains mandatory. Invalid anchors fail, malformed candidates skip, and oversized or incomplete responses fail explicitly. A conversation page is a bounded summary index, not a complete cross-folder thread or a body summary. Read exact references before interpreting message content or preparing a reply. See the [workflow and limitations](/docs/tools#conversation).
-
-Summary flag output stays bounded to 100 entries while preserving standard system flags even when the server lists them after 100 custom keywords. Premature literal-drain races are fixed in ordinary reads, exact-ID search, and conversation header reads; partial provider responses must not be reported as complete matches.
-
-Draft saving is unchanged: it appends a new composed draft. Lossless editing of an existing saved draft is not included in version 0.6.
-
-
-
-## Version 0.7: bounded reads and classified errors
-
-The six tool names now cover 22 operations. `mail_query` adds `read_many` with 1–10 distinct exact references, per-item outcomes, explicit budget/continuation metadata, and summary/full detail. Existing single `read` behavior is unchanged. Application-handler errors gain stable codes and recovery guidance; SDK-level validation remains SDK-formatted. Scopes, deployment gates, annotations, confirmation, exact UIDVALIDITY/MODSEQ, and one-time send semantics are unchanged.
-
-The five-selected-message signed MCP fixture reduces read calls from five to one. Complete MCP result JSON grows from 10,760 to 11,708 bytes in that fixture; discovery grows from 9,661 bytes in 0.6 to 10,341 bytes in 0.7. Per-item references/status and budget metadata add response bytes; this is a round-trip reduction, not a claim of smaller total output. Discovery remains six tools; the schema-size regression ceiling is now 70% of the original 17-tool baseline to accommodate the bounded reference array. Historical measurements above describe their named releases.
-
-
-## First-party OAuth and ChatGPT discovery
-
-The optional [built-in OAuth issuer](/docs/oauth-reference) does not rename the six tools or change their 22 operation routes. `tools/list` now returns identical `securitySchemes` at the top level and in the legacy `_meta` mirror, as required by current [ChatGPT authentication guidance](https://developers.openai.com/plugins/build/auth). Authentication errors retain the `mcp/www_authenticate` challenge. Scopes, deployment gates, tool annotations, and individual send/deletion confirmation boundaries remain unchanged.
-
-The duplication adds 429 bytes to the deterministic discovery fixture: complete tool-definition JSON is 10,770 bytes against the same 14,886-byte original baseline. These are compact JSON measurements, not tokenizer counts. For that release, the regression test retained the 70% structural ceiling and permitted at most 512 extra bytes for the top-level OAuth metadata mirror; version 0.8 adds the bounded draft allowance below. Re-run `TestToolSchemaTokenBudget` on the exact commit, and do not treat the historical version tables above as current measurements.
-
-Deploying the OAuth implementation does not switch an existing issuer, enroll the owner, or verify a live ChatGPT connection. Changing issuer/resource/subject affects the owner binding of existing preparations and receipts; follow the [issuer migration procedure](/docs/oauth-reference#migrate-from-an-external-issuer).
-
-## Version 0.8: structured saved drafts
-
-Three additive actions retain the same six risk-separated tool names and scopes:
-
-- `mail_query` / `draft`: exact reference → complete supported draft plus source digest.
-- `mail_create` / `revise_draft`: exact reference, digest, explicit changes → new saved revision; original preserved.
-- `mail_prepare` / `draft`: exact reference and digest → immutable reviewed send preparation, with no source cleanup.
-
-Refresh the client’s tool schema after deployment. Never reconstruct an editable draft from ordinary summary/read output, substitute an inferred digest, or retry a digest conflict without rereading and reviewing. `changes` retains omitted fields, clears explicitly empty supported fields, and replaces the entire attachment list. Existing new-draft creation is unchanged. See [Saved draft lifecycle](/docs/tools#saved-draft-lifecycle) for the strict MIME subset and normalization boundaries.
-
-### Version 0.8 discovery measurement
-
-The final deterministic fixture measures 11,004 structural JSON bytes, compared with 10,341 before the draft actions, plus 429 bytes for the OAuth metadata mirror: **11,433 complete wire bytes**. The original 17-tool fixture remains unchanged at 14,886 bytes. The structural regression budget is 70% of that baseline plus a separately bounded 768-byte draft allowance; the OAuth mirror retains its independent 512-byte ceiling. This is compact JSON size, not a tokenizer measurement, and does not claim the current complete schema is below 70% of the baseline.
-
-
-## Version 0.9: first-use clarity and safe body edits
-
-The six names and 25 operations are unchanged. Refresh discovery: action arguments now use `?` for optional fields, disallowed nulls are no longer advertised, and field help covers literal search/defaults/date boundaries, exact compact references, batch continuation, standard flags, draft digests, forwarding options, and preview-to-send values. Existing optional `search.unread`/`search.flagged` null-as-omitted behavior remains supported.
-
-Draft body revisions now require an explicit choice for both alternatives when the other authored body exists: set or clear both `changes.text` and `changes.html`. One-sided edits return `invalid_arguments` before APPEND, preventing an old HTML body from surviving a text edit or vice versa. Subject/recipient-only edits still preserve bodies; genuine HTML-only sources can update HTML and regenerate plaintext. Read the new revision for its own source digest before preparing it. Explicit invalid forward options now also report `invalid_arguments`.
-
-HTML-only incoming mail collapses excess blank lines and may retain bounded absolute HTTP(S)/mailto anchor destinations as untrusted text. No remote resources are fetched, destinations verified, or links executed; extraction limits still apply. See [read limits](/docs/tools#read-limits).
-
-### Version 0.9 discovery measurement
-
-On the complete deterministic six-tool fixture, compact UTF-8 JSON is **11,433 → 11,383 bytes** (including both OAuth metadata declarations). A local expansion of `$ref` with `$defs` removed is **12,299 → 12,294 bytes**. These small reductions accompany more complete first-use guidance; they are not token counts or measured connector-context savings. Connectors can expand references or otherwise transform discovery. Both complete forms have regression checks against the unchanged 0.8 snapshot; the original 17-tool baseline and prior historical measurements remain intact. Preparation previews and review-critical content are never shortened.
-
-## Version 0.10 personal instances and Microsoft Graph
-
-Refresh MCP tool definitions after upgrading. Existing IMAP references retain their folder/UIDVALIDITY/UID identity. Microsoft Graph returns provider/account/native-ID references instead; clients must preserve the whole returned object and never synthesize an IMAP UID for it. Native folder IDs, received-date cursors, automatic Sent filing, and unsupported conversation/MODSEQ/permanent-delete actions are documented in the [Microsoft reference](/docs/microsoft#mailbox-behavior). Inspect actual capabilities before choosing an operation.
-
-The iCloud and Yahoo presets use explicit provider app passwords and pinned documented TLS endpoints. Each person still has a separate deployment and mailbox. The optional [personal updater](/docs/keep-updated) follows eligible stable releases while retaining runtime settings and durable state; it does not migrate owners into a shared service.
-
-For this release, measured six-tool discovery JSON is 11,742 bytes versus the historical 17-tool baseline of 14,886 bytes. Input schemas are 8,293 bytes (previous snapshot 7,695); the expanded comparison is 12,712 bytes versus 12,299 for 0.8. These are distinct measurements, not interchangeable token counts or a claim that the new schema shrank. The regression budget adds a bounded 512-byte allowance for Graph references while retaining the historical fixtures.
+Batch reading can save round trips while increasing total response bytes because every item needs identity, status, and budget metadata. Measure both call count and complete output before claiming an improvement. Historical release-specific measurements now live in the [Changelog](/docs/changelog).

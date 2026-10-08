@@ -58,10 +58,11 @@ When a code change introduces a new public workflow, interface, permission rule,
 
 The personal updater follows published stable releases, not raw `main`. Shipping its workflow does not publish a release or prove another owner's deployment works.
 
-1. Bump `internal/app`'s application version, the tool-reference version, and the docs release footer coherently.
+1. Update the [Changelog](/docs/changelog) under the intended version marked **Unreleased**. Summarize user-visible features, fixes, security changes, and required upgrade actions, linking the relevant references. Keep chronological notes out of the migration/token-budget guide. Bump `internal/app`'s application version, the tool-reference version, and the docs release footer coherently.
 2. Review `.github/angelos-release.json`. Keep `format: 1`; set `automatic: true` only when this transition requires no owner action. Increment `config_epoch` or `state_epoch` for any required configuration or state migration, set `automatic: false`, and write explicit migration notes. The updater checks intervening manifests too, so do not mark an incompatible intermediate change safe simply because a later manifest restores an old number.
 3. Run all required tests and wait for the upstream `ci.yml` workflow to succeed on the exact final `main` commit. Fixes need a new complete check on their own commit.
 4. Publish a non-draft, non-prerelease GitHub release with a strict `vMAJOR.MINOR.PATCH` tag pointing at that tested commit. The tag version must equal the application's version. Do not move an existing release tag.
-5. Distinguish publication, fixture-test success, an owner's check-only run, and an actual successful production apply. Workflow-file changes require reviewed manual sync in personal forks before unattended updates can resume.
+5. After verifying publication, mark the changelog version released and link its immutable tag/source. Add a date only from verified release publication metadata, never a guessed date or commit timestamp.
+6. Distinguish publication, fixture-test success, an owner's check-only run, and an actual successful production apply. Workflow-file changes require reviewed manual sync in personal forks before unattended updates can resume.
 
 The updater trusts the pinned upstream repository and verifies the tag's resolved commit and successful CI; it does not claim cryptographic release signing. No stable release is implied by this documentation. See [Keep Angelos updated](/docs/keep-updated) for owner setup and failure handling.

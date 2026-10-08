@@ -11,5 +11,6 @@ export const siteConfig = {
 export const docCategories = ["Get started", "Use your inbox", "Reference", "Contributing"] as const;
 export const primaryNav = [
   { href: "/docs", label: "Docs" },
+  { href: "/docs/changelog", label: "Changelog" },
   { href: siteConfig.repoUrl, label: "GitHub repository", external: true }
 ];
