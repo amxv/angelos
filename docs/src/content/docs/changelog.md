@@ -10,7 +10,9 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
-## 0.11.0 — Unreleased
+## 0.11.0 — Released 2026-10-08
+
+[Published release](https://github.com/amxv/angelos/releases/tag/v0.11.0) · [Source at v0.11.0](https://github.com/amxv/angelos/commit/95c93e2c338f99e2caab3093d6705e2e8a583eb8)
 
 ### Added and changed
 
