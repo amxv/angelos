@@ -10,6 +10,10 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
+## Unreleased
+
+- Updated the Go build and CI toolchain to 1.27.2 and `golang.org/x/net` to 0.60.0 to address vulnerabilities reported by `govulncheck`. Existing deployments must be rebuilt and redeployed with the patched toolchain to receive the standard-library fixes.
+
 ## 0.11.1 — Released 2026-10-08
 
 [Published release](https://github.com/amxv/angelos/releases/tag/v0.11.1) · [Source at v0.11.1](https://github.com/amxv/angelos/commit/a393e10ee24923c1af049b836555587fd99334e0)
