@@ -20,3 +20,4 @@ microsoft.env
 
 # Locked CI tooling is tracked; installed packages are not.
 node_modules/
+tmp/
