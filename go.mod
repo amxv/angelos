@@ -2,7 +2,7 @@ module github.com/amxv/angelos
 
 go 1.26.0
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
