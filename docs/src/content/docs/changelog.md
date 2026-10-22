@@ -12,7 +12,7 @@ An **Unreleased** entry describes work being prepared, not a published release. 
 
 ## Unreleased
 
-- Updated the Go build and CI toolchain to 1.27.2 and `golang.org/x/net` to 0.60.0 to address vulnerabilities reported by `govulncheck`. Existing deployments must be rebuilt and redeployed with the patched toolchain to receive the standard-library fixes.
+- Updated the Go build and CI toolchain to 1.27.3 to fix the reachable TLS certificate-verification vulnerability [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) ([toolchain change](https://github.com/amxv/angelos/commit/094d2ce9041130b01d267967d0024946cf740d19)). The earlier `golang.org/x/net` 0.60.0 security update remains in place ([dependency change](https://github.com/amxv/angelos/commit/36abb8d46d067da33472219c6c7b741febc34c32)). Existing deployments must be rebuilt and redeployed with the patched toolchain to receive the standard-library fix; see [testing](/docs/testing).
 
 ## 0.11.1 — Released 2026-10-08
 

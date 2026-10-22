@@ -8,7 +8,7 @@ category: Contributing
 
 For first-run mailbox verification, follow [Connect Your Assistant](/docs/quickstart); this page covers contributor checks and synthetic regression tests.
 
-Use Go 1.27.1, the toolchain requested by `go.mod` and used in CI. The module declares a Go 1.26.0 language version. For documentation checks, use Bun 1.4.2 as declared by `docs/package.json`. Keep mail credentials out of test fixtures and CI logs.
+Use Go 1.27.3, the toolchain requested by `go.mod` and used in CI. The module declares a Go 1.26.0 language version. For documentation checks, use Bun 1.4.2 as declared by `docs/package.json`. Keep mail credentials out of test fixtures and CI logs.
 
 ## Go checks
 
