@@ -3,5 +3,5 @@
   "automatic": true,
   "config_epoch": 1,
   "state_epoch": 1,
-  "notes": "Backward-compatible optional initial OAuth scopes; existing grants, runtime defaults, and v1 state are preserved. Personal updater workflow changes require manual review/sync before automatic updates resume."
+  "notes": "Private standalone repositories can track tagged upstream releases on a separate angelos-upstream branch while preserving their own main. Existing OAuth, Redis, mailbox state, and configuration remain compatible. Updated personal updater controls require reviewed manual sync before enabling automatic updates."
 }

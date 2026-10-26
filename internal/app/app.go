@@ -20,7 +20,7 @@ import (
 )
 
 // Version identifies the public MCP interface and HTTP service build.
-const Version = "0.11.1"
+const Version = "0.11.2"
 
 type Submitter interface {
 	Send(context.Context, mail.Envelope, []byte) (mail.SendResult, error)

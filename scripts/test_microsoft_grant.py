@@ -11,6 +11,7 @@ import socket
 import stat
 import ssl
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -233,14 +234,23 @@ class SocketFixtures(unittest.TestCase):
 
     def parse(self, wire, shutdown=True):
         server, client = socket.socketpair()
+        # Large synthetic headers can exceed a macOS socketpair's send buffer.
+        # Let the parser consume data concurrently instead of blocking sendall.
+        def send():
+            try:
+                client.sendall(wire)
+                if shutdown:
+                    client.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+        sender = threading.Thread(target=send, daemon=True)
+        sender.start()
         try:
-            client.sendall(wire)
-            if shutdown:
-                client.shutdown(socket.SHUT_WR)
             return grant.read_callback(server, time.monotonic() + 2)
         finally:
             client.close()
             server.close()
+            sender.join(timeout=2)
 
     def test_local_callback_parser(self):
         body = callback(pending())

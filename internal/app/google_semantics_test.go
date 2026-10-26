@@ -150,7 +150,7 @@ func TestGmailScopesAndSendGatesRemainRequired(t *testing.T) {
 }
 
 func TestGmailDiscoveryContainsRestrictionsAndVersion(t *testing.T) {
-	if Version != "0.11.1" {
+if Version != "0.11.2" {
 		t.Fatalf("version: %s", Version)
 	}
 	out := callProtocol(t, &App{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)

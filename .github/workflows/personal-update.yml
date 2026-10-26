@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Deploy the tested release and fast-forward this personal fork
+        description: Deploy the tested release and fast-forward the personal release branch
         type: boolean
         default: false
 permissions:
@@ -20,12 +20,14 @@ env:
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 jobs:
   plan:
-    if: github.repository != 'amxv/angelos' && github.event.repository.fork && (github.event_name == 'workflow_dispatch' || vars.ANGELOS_AUTO_UPDATE == 'true')
+    if: github.repository != 'amxv/angelos' && (github.event_name == 'workflow_dispatch' || vars.ANGELOS_AUTO_UPDATE == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       changed: ${{ steps.plan.outputs.changed }}
       base: ${{ steps.plan.outputs.base }}
+      base_version: ${{ steps.plan.outputs.base_version }}
+      controller: ${{ steps.plan.outputs.controller }}
       target: ${{ steps.plan.outputs.target }}
       tag: ${{ steps.plan.outputs.tag }}
       version: ${{ steps.plan.outputs.version }}
@@ -120,14 +122,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ANGELOS_UPSTREAM_TOKEN: ${{ secrets.ANGELOS_UPSTREAM_TOKEN }}
           VALIDATED_BASE: ${{ needs.plan.outputs.base }}
+          VALIDATED_CONTROLLER: ${{ needs.plan.outputs.controller }}
           VALIDATED_TARGET: ${{ needs.plan.outputs.target }}
         run: |
           cp scripts/personal_update.py "$RUNNER_TEMP/personal_update.py"
           cp scripts/upstream-askpass.sh "$RUNNER_TEMP/angelos-askpass"
-          chmod 700 "$RUNNER_TEMP/angelos-askpass"
+          cp scripts/repository-push-askpass.sh "$RUNNER_TEMP/angelos-push-askpass"
+          chmod 700 "$RUNNER_TEMP/angelos-askpass" "$RUNNER_TEMP/angelos-push-askpass"
           export GIT_ASKPASS="$RUNNER_TEMP/angelos-askpass" GIT_TERMINAL_PROMPT=0
           python3 "$RUNNER_TEMP/personal_update.py" plan
-          test "$(git rev-parse HEAD)" = "$VALIDATED_BASE"
+          test "$(git rev-parse HEAD)" = "$VALIDATED_CONTROLLER"
           test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$VALIDATED_TARGET"
       - name: Verify project and current production before applying
         id: production
@@ -135,14 +139,27 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           EXPECTED_COMMIT: ${{ needs.plan.outputs.target }}
           EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
+          EXPECTED_BASE_VERSION: ${{ needs.plan.outputs.base_version }}
         run: |
           python3 "$RUNNER_TEMP/personal_update.py" project
-          python3 "$RUNNER_TEMP/personal_update.py" production --target "$EXPECTED_COMMIT" --version "$EXPECTED_VERSION"
+          python3 "$RUNNER_TEMP/personal_update.py" production --target "$EXPECTED_COMMIT" --version "$EXPECTED_VERSION" --base-version "$EXPECTED_BASE_VERSION"
       - name: Check out the exact validated source (no candidate scripts executed here)
         if: steps.production.outputs.current != 'true'
         env:
           TARGET_SHA: ${{ needs.plan.outputs.target }}
         run: git checkout --detach "$TARGET_SHA"
+      - name: Pin the previously verified Vercel project (never create a new one)
+        if: steps.production.outputs.current != 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          target = Path('.vercel/project.json')
+          target.parent.mkdir(exist_ok=True)
+          target.write_text(json.dumps({'orgId': os.environ['VERCEL_ORG_ID'],
+                                        'projectId': os.environ['VERCEL_PROJECT_ID']}))
+          PY
       - name: Stage production build without assigning domains
         if: steps.production.outputs.current != 'true'
         id: deploy
@@ -169,14 +186,16 @@ jobs:
         run: |
           python3 "$RUNNER_TEMP/personal_update.py" health --version "$EXPECTED_VERSION"
           python3 "$RUNNER_TEMP/personal_update.py" production --target "$TARGET_SHA" --version "$EXPECTED_VERSION" --require-current
-      - name: Fast-forward personal fork after verification
+      - name: Fast-forward validated release branch after verification
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ needs.plan.outputs.base }}
           TARGET_SHA: ${{ needs.plan.outputs.target }}
+          CONTROLLER_SHA: ${{ needs.plan.outputs.controller }}
           EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          python3 "$RUNNER_TEMP/personal_update.py" finish --base "$BASE_SHA" --target "$TARGET_SHA"
+          export GIT_ASKPASS="$RUNNER_TEMP/angelos-push-askpass" GIT_TERMINAL_PROMPT=0
+          python3 "$RUNNER_TEMP/personal_update.py" finish --base "$BASE_SHA" --target "$TARGET_SHA" --controller "$CONTROLLER_SHA"
   report:
     if: always() && needs.plan.result != 'skipped'
     needs: [plan, validate, deploy]

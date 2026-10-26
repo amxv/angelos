@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed personal-fork release updater. Never writes application settings."""
+"""Fail-closed personal-instance release updater. Never writes application settings."""
 import argparse
 import json
 import os
@@ -14,9 +14,11 @@ from pathlib import Path
 
 UPSTREAM = "amxv/angelos"
 UPSTREAM_ID = 1407020355
+PRIVATE_RELEASE_BRANCH = "angelos-upstream"
 MANIFEST = ".github/angelos-release.json"
 TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
+REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 
 class Stop(RuntimeError):
@@ -103,6 +105,52 @@ def stable_release(release):
     return release["tag_name"]
 
 
+def instance_mode(own):
+    """Accept only a canonical public fork or an explicitly private standalone repository."""
+    if own.get("fork") is True and own.get("private") is False and own.get("parent", {}).get("full_name") == UPSTREAM:
+        return "fork"
+    if own.get("fork") is False and own.get("private") is True and own.get("visibility") == "private":
+        return "private"
+    raise Stop("Use a public direct Angelos fork or a private standalone repository. Other repository types are not eligible.")
+
+
+def tag_commit(tag, token):
+    remote_tag = api(f"/repos/{UPSTREAM}/git/ref/tags/{tag}", token)["object"]
+    for _ in range(5):
+        if remote_tag["type"] == "commit":
+            break
+        require(remote_tag["type"] == "tag", "Unsupported release tag type.")
+        remote_tag = api(f"/repos/{UPSTREAM}/git/tags/{remote_tag['sha']}", token)["object"]
+    require(remote_tag.get("type") == "commit" and SHA.fullmatch(remote_tag.get("sha", "")),
+            "Unsupported or missing release commit.")
+    return remote_tag["sha"]
+
+
+def blob_at(rev, path):
+    """A missing file has no blob; compare deletions without executing candidate code."""
+    result = subprocess.run(["git", "rev-parse", "--verify", f"{rev}:{path}"],
+                            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def check_control_files(base, target, controller, mode):
+    # GitHub refuses a workflow-file update made by its limited GITHUB_TOKEN.
+    # Independently deployed private repositories retain main as their reviewed
+    # control plane, so a changed workflow/updater must already be synced there.
+    changed_workflows = git("diff", "--name-only", base, target, "--", ".github/workflows")
+    if mode == "fork":
+        require(not changed_workflows, "This release changes workflows. Review and manually sync it with workflow-authorized credentials before resuming automatic updates.")
+        return
+    # Unlike a public fork, private main is never advanced by automation.
+    # Other workflow files on main can therefore remain owner-controlled;
+    # only the actual updater entry point and its privileged dependencies
+    # must be reviewed and synced when they change upstream.
+    paths = git("diff", "--name-only", base, target, "--", ".github/workflows/personal-update.yml", "scripts/personal_update.py",
+                "scripts/upstream-askpass.sh", "scripts/repository-push-askpass.sh", ".github/ci-tools").splitlines()
+    require(all(blob_at(controller, path) == blob_at(target, path) for path in paths),
+            "Upstream updater/workflow controls changed. Review and sync the exact trusted release files to private main before applying; no deployment attempted.")
+
+
 def write_output(values):
     print(json.dumps(values, sort_keys=True))
     if os.environ.get("GITHUB_OUTPUT"):
@@ -113,17 +161,28 @@ def write_output(values):
 
 def plan():
     repository = env("GITHUB_REPOSITORY")
-    require(repository != UPSTREAM, "Updater runs only in an opted-in personal fork.")
+    require(REPOSITORY.fullmatch(repository) and repository.lower() != UPSTREAM, "Updater runs only in an opted-in personal repository.")
     require(os.environ.get("ANGELOS_AUTO_UPDATE") == "true" or os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch", "Owner opt-in is absent.")
     own = api(f"/repos/{repository}", env("GH_TOKEN"))
-    require(own.get("fork") and own.get("parent", {}).get("full_name") == UPSTREAM,
-            "Repository must be a direct fork of the pinned amxv/angelos upstream.")
+    mode = instance_mode(own)
+    require(own.get("full_name", "").lower() == repository.lower(), "Repository identity mismatch.")
     require(own.get("default_branch") == "main" and env("GITHUB_REF") == "refs/heads/main",
-            "Run on the fork's main default branch only.")
+            "Run on the personal repository's main default branch only.")
     require(not git("status", "--porcelain"), "Working tree has local changes; refusing to overwrite them.")
-    base = git("rev-parse", "HEAD")
+    controller = git("rev-parse", "HEAD")
     current = api(f"/repos/{repository}/git/ref/heads/main", env("GH_TOKEN"))["object"]["sha"]
-    require(base == current, "Fork changed since checkout; rerun on current main.")
+    require(controller == current, "Control branch changed since checkout; rerun on current main.")
+    if mode == "private":
+        # The tracked source is a release commit, not the owner's possibly
+        # customized main. Creating this branch must be a separately approved,
+        # read-only-to-production bootstrap at the last verified live release.
+        try:
+            base = api(f"/repos/{repository}/git/ref/heads/{PRIVATE_RELEASE_BRANCH}", env("GH_TOKEN"))["object"]["sha"]
+        except Stop:
+            raise Stop("Private release-tracking branch angelos-upstream missing or inaccessible. Initialize it at the verified currently deployed upstream release; never guess or reset main.") from None
+    else:
+        base = controller
+    require(SHA.fullmatch(base), "Release baseline is not a Git commit.")
     # Public release metadata and Git fetches need no PAT. Keep the fork's
     # GITHUB_TOKEN scoped to its own repository; optional read-only upstream
     # credentials support private access without changing the trust checks.
@@ -137,17 +196,10 @@ def plan():
     git("-c", "http.followRedirects=false", "fetch", "--no-tags", f"https://github.com/{UPSTREAM}.git", f"refs/tags/{tag}")
     target = git("rev-parse", "FETCH_HEAD^{commit}")
     require(SHA.fullmatch(target), "Invalid upstream commit.")
-    remote_tag = api(f"/repos/{UPSTREAM}/git/ref/tags/{tag}", token)["object"]
-    for _ in range(5):
-        if remote_tag["type"] == "commit":
-            break
-        require(remote_tag["type"] == "tag", "Unsupported release tag type.")
-        remote_tag = api(f"/repos/{UPSTREAM}/git/tags/{remote_tag['sha']}", token)["object"]
-    require(remote_tag.get("type") == "commit" and remote_tag["sha"] == target,
+    require(tag_commit(tag, token) == target,
             "Release tag moved or could not be verified; stop and ask the maintainer.")
     require(ancestor(base, target), "Release is older than this fork or histories diverged; manual review required.")
-    require(not git("diff", "--name-only", base, target, "--", ".github/workflows"),
-            "This release changes workflows. Review and manually sync it with workflow-authorized credentials before resuming automatic updates.")
+    check_control_files(base, target, controller, mode)
     compatible(manifest_at(base), manifest_at(target))
     # Every intervening metadata state must permit unattended transitions.
     for commit in git("rev-list", "--full-history", f"{base}..{target}", "--", MANIFEST).splitlines():
@@ -159,11 +211,15 @@ def plan():
             "Latest trusted upstream CI run for this exact release commit has not passed.")
     old_version = re.search(r'const Version = "([0-9]+\.[0-9]+\.[0-9]+)"', git("show", f"{base}:internal/app/app.go"))
     require(old_version, "Current application version is unknown; manual review required.")
+    if mode == "private":
+        require(tag_commit("v" + old_version[1], token) == base,
+                "Private release-tracking branch does not point to an official tagged upstream release. Repair it with an owner-reviewed baseline, not a force reset.")
     if base != target:
         require(tuple(map(int, tag[1:].split("."))) > tuple(map(int, old_version[1].split("."))), "Release version must increase; refusing a version rollback or same-version replacement.")
     version_source = git("show", f"{target}:internal/app/app.go")
     require(f'const Version = "{tag[1:]}"' in version_source, "Release tag and application version disagree.")
-    write_output({"changed": base != target, "base": base, "target": target, "tag": tag, "version": tag[1:]})
+    write_output({"changed": base != target, "base": base, "target": target, "controller": controller,
+                  "mode": mode, "base_version": old_version[1], "tag": tag, "version": tag[1:]})
 
 
 def project():
@@ -195,12 +251,15 @@ def deployment(url):
     print("Verified staged production deployment READY and source commit identity.")
 
 
-def production(target, version, require_current=False):
+def production(target, version, require_current=False, base_version=None):
     origin = env("ANGELOS_PRODUCTION_URL").rstrip("/")
     result = request_json(urllib.request.Request(origin + "/healthz", headers={"Cache-Control": "no-cache"}))
     require(result.get("service") == "angelos" and result.get("configured") is True, "Existing production is not healthy/configured; investigate before updating.")
     current = result.get("version", "")
     require(TAG.fullmatch("v" + current), "Existing production version is unknown; manual review required.")
+    if base_version:
+        require(TAG.fullmatch("v" + base_version) and tuple(map(int, base_version.split("."))) <= tuple(map(int, current.split("."))),
+                "Production is older than the tracked release baseline. Verify the initial private source marker before any deployment.")
     require(tuple(map(int, current.split("."))) <= tuple(map(int, version.split("."))), "Production is newer than the candidate; refusing rollback while fork source lags.")
     if current == version:
         hostname = urllib.parse.urlsplit(origin).hostname
@@ -231,15 +290,33 @@ def health(version):
     raise Stop("Production health verification failed. Inspect the deployment; no automatic rollback or source advance was attempted.")
 
 
-def finish(base, target):
-    require(SHA.fullmatch(base) and SHA.fullmatch(target), "Invalid update commit.")
+def finish(base, target, controller):
+    require(SHA.fullmatch(base) and SHA.fullmatch(target) and SHA.fullmatch(controller), "Invalid update commit.")
     repo, token = env("GITHUB_REPOSITORY"), env("GH_TOKEN")
-    require(repo != UPSTREAM, "Never advance upstream from this workflow.")
-    current = api(f"/repos/{repo}/git/ref/heads/main", token)["object"]["sha"]
-    require(current == base, "Fork changed during deployment; reconcile manually. Production may already be updated.")
-    result = api(f"/repos/{repo}/git/refs/heads/main", token, "PATCH", {"sha": target, "force": False})
-    require(result.get("object", {}).get("sha") == target, "Fork advancement could not be verified.")
-    print("Verified fast-forward to the tested release. Existing settings and data were not modified.")
+    require(REPOSITORY.fullmatch(repo) and repo.lower() != UPSTREAM, "Never advance upstream from this workflow.")
+    own = api(f"/repos/{repo}", token)
+    mode = instance_mode(own)
+    require(own.get("full_name", "").lower() == repo.lower() and own.get("default_branch") == "main",
+            "Personal repository identity or default branch changed.")
+    current_controller = api(f"/repos/{repo}/git/ref/heads/main", token)["object"]["sha"]
+    require(current_controller == controller, "Control branch changed during deployment; reconcile manually. Production may already be updated.")
+    release_branch = PRIVATE_RELEASE_BRANCH if mode == "private" else "main"
+    current = api(f"/repos/{repo}/git/ref/heads/{release_branch}", token)["object"]["sha"] if mode == "private" else current_controller
+    require(current == base, "Release baseline changed during deployment; reconcile manually. Production may already be updated.")
+    if mode == "private":
+        # Detached repositories have their own Git object storage. A GitHub
+        # Git-ref PATCH cannot refer to the newly fetched upstream commit
+        # until its objects are actually pushed into this private repository.
+        # Upload and advance via an ordinary non-force push. The server rejects
+        # non-fast-forward updates; the workflow has already verified ancestry.
+        env("GIT_ASKPASS")
+        git("-c", "http.followRedirects=false", "-c", "credential.helper=", "push", "--porcelain",
+            f"https://github.com/{repo}.git", f"{target}:refs/heads/{release_branch}")
+        result = api(f"/repos/{repo}/git/ref/heads/{release_branch}", token)
+    else:
+        result = api(f"/repos/{repo}/git/refs/heads/{release_branch}", token, "PATCH", {"sha": target, "force": False})
+    require(result.get("object", {}).get("sha") == target, "Release branch advancement could not be verified.")
+    print(f"Verified fast-forward of {release_branch} to the tested release. Existing settings and data were not modified.")
 
 
 def main():
@@ -250,10 +327,12 @@ def main():
     parser.add_argument("--require-current", action="store_true")
     parser.add_argument("--base")
     parser.add_argument("--target")
+    parser.add_argument("--controller")
+    parser.add_argument("--base-version")
     args = parser.parse_args()
     try:
-        {"plan": plan, "project": project, "deployment": lambda: deployment(args.url), "production": lambda: production(args.target, args.version, args.require_current), "health": lambda: health(args.version),
-         "finish": lambda: finish(args.base, args.target)}[args.command]()
+        {"plan": plan, "project": project, "deployment": lambda: deployment(args.url), "production": lambda: production(args.target, args.version, args.require_current, args.base_version), "health": lambda: health(args.version),
+         "finish": lambda: finish(args.base, args.target, args.controller)}[args.command]()
     except (Stop, KeyError, TypeError, OSError) as error:
         print(f"Update stopped: {error}", file=sys.stderr)
         sys.exit(1)
