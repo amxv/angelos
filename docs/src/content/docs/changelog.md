@@ -10,9 +10,9 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
-## Unreleased
+## 0.11.2 — Released 2026-10-26
 
-### 0.11.2 (pending publication)
+[Published release](https://github.com/amxv/angelos/releases/tag/v0.11.2) · [Source at v0.11.2](https://github.com/amxv/angelos/commit/e1a0b156d4140d960113c1c616e011676ca89a73)
 
 - Added an opt-in update path for **private standalone GitHub repositories**, including an in-place privacy migration that preserves the existing Vercel project, Redis, production origin, OAuth keys, passkeys, and assistant connection. Its `main` retains the owner's reviewed automation and personal commits; `angelos-upstream` tracks the last deployed official release. See [private source migration](/docs/keep-updated#convert-an-existing-working-fork-to-private-without-redeploying).
 - The updater now validates release ancestry and approved source identity for both repository modes. After deployment it fast-forwards only the correct release branch, never force-resets the owner's private `main`. Upstream changes to the private repository's actual updater controls require exact reviewed sync before future deployment. The existing public-fork protections remain in place.
