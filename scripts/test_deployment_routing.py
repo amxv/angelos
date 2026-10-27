@@ -68,6 +68,7 @@ class DeploymentRoutingTests(unittest.TestCase):
         deploy = workflow.split("  deploy-api:\n", 1)[1].split("  secrets:\n", 1)[0]
         self.assertIn("needs: [changes, go]", deploy)
         self.assertIn("github.event_name == 'push'", deploy)
+        self.assertIn("github.repository == 'amxv/angelos'", deploy)
         self.assertIn("inputs.redeploy_api", deploy)
         self.assertIn("github.ref == 'refs/heads/main'", deploy)
         self.assertIn("needs.go.result == 'success'", deploy)

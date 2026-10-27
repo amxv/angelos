@@ -21,6 +21,8 @@ concurrency:
 
 jobs:
   docs:
+    # Private personal clones use their own API updater, not upstream's docs site.
+    if: github.repository == 'amxv/angelos'
     runs-on: ubuntu-latest
     defaults:
       run:

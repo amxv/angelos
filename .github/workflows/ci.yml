@@ -81,6 +81,7 @@ jobs:
     name: Deploy API
     needs: [changes, go]
     if: >-
+      github.repository == 'amxv/angelos' &&
       github.ref == 'refs/heads/main' &&
       needs.go.result == 'success' &&
       ((github.event_name == 'push' && needs.changes.outputs.api == 'true') ||
