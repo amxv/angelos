@@ -17,9 +17,9 @@ You host your own instance and can connect multiple assistants to one mailbox wh
 
 ## Get started
 
-Ask your agent to follow [Connect Your Assistant](https://angelos.ashray.xyz/docs/quickstart). It walks through your GitHub fork, Vercel deployment, Upstash database, mailbox, and assistant connection. Your agent handles setup and verification; you approve access and complete secure credential entry and passkey prompts.
+Ask your agent to follow [Connect Your Assistant](https://angelos.ashray.xyz/docs/quickstart). It walks through your GitHub repository, Vercel deployment, Upstash database, mailbox, and assistant connection. Your agent handles setup and verification; you approve access and complete secure credential entry and passkey prompts.
 
-Once connected, you can opt into [automatic release updates](https://angelos.ashray.xyz/docs/keep-updated). They support a public fork or a private standalone repository. Existing owners can [make their source private](https://angelos.ashray.xyz/docs/keep-updated#convert-an-existing-working-fork-to-private-without-redeploying) without creating another deployment, resetting Redis, or changing assistant settings.
+For a private GitHub copy that follows official releases and deploys them through GitHub Actions, see [Keep Angelos updated](https://angelos.ashray.xyz/docs/keep-updated). The updater uses your existing Vercel project and keeps its domain, Redis data, and assistant connections intact.
 
 ## Email providers
 

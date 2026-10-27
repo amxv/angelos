@@ -51,9 +51,9 @@ Angelos does not create an email account or offer a hosted signup. Each person g
 
 ## 1. Create your Vercel API project
 
-**Agent does:** inspect the existing GitHub repository, Vercel project, production domain, and deployment status first. Record non-secret identifiers so interrupted setup can resume without duplicating infrastructure. An already connected owner can [make an existing fork private and enable independent release tracking](/docs/keep-updated#convert-an-existing-working-fork-to-private-without-redeploying) later, without reinstalling Angelos or reconnecting their assistant.
+**Agent does:** inspect the existing GitHub repository, Vercel project, production domain, and deployment status first. Record non-secret identifiers so interrupted setup can resume without duplicating infrastructure. If you want a private standalone repository with automatic upstream updates, follow [Keep Angelos updated](/docs/keep-updated) to prepare your source before importing it into Vercel.
 
-1. Create your fork in your GitHub account, or verify and reuse your existing fork. Keep its application code unchanged; per-person settings belong in production environment variables. In [Vercel](https://vercel.com/new), import that fork as a new project, for example `my-angelos`, only if this instance has no project yet.
+1. Create your fork in your GitHub account, reuse your existing repository, or use the private standalone copy prepared in [Keep Angelos updated](/docs/keep-updated). Keep its application code unchanged; per-person settings belong in production environment variables. In [Vercel](https://vercel.com/new), import your repository as a new project, for example `my-angelos`, only if this instance has no project yet.
 2. Set the **Root Directory to the repository root**, not `docs/`. Keep the checked-in root `vercel.json`: it selects the Go API and runs its tests before building. You do not need a second project for this documentation website.
 3. Create the initial deployment. It can run before secrets are configured, but mail access will remain unavailable. A configuration error at this stage is expected.
 4. In the project’s Domains settings, copy its **stable production domain**, such as `my-angelos.vercel.app`. A custom domain works too, once DNS and HTTPS are ready. Do not use a commit-specific preview address.
@@ -373,7 +373,7 @@ Your assistant is ready for [inbox work](/docs/inbox-guide), [writing and sendin
 
 ## 7. Keep your personal instance updated
 
-Once the first connection works, ask your agent to configure [Keep Angelos updated](/docs/keep-updated). The optional daily updater works with public forks **and private standalone repositories**. It follows eligible upstream releases, validates them, and deploys to your existing project. It needs a one-time approved setup for repository access, Actions, and Vercel deployment credentials; it is not enabled just by forking or making a repository private. Keep your domain, Redis, environment, signing key, and existing assistant connection unchanged.
+Once the first connection works, ask your agent to configure [Keep Angelos updated](/docs/keep-updated). The guide shows how a private standalone repository follows official upstream releases and deploys eligible updates to your existing Vercel project through GitHub Actions. Automatic deployments require explicit setup and opt-in; creating a repository alone does not enable them.
 
 ## Troubleshooting
 
