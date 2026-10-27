@@ -1,94 +1,136 @@
 ---
 title: Keep Angelos updated
-description: Run Angelos from a private GitHub repository and automatically deploy verified upstream releases with GitHub Actions.
-summary: One private repository, one release-tracking branch, and automatic updates to your Vercel project.
+description: Agent-facing CLI setup for a private Angelos repository that follows verified upstream releases automatically.
+summary: One private repository, one release-tracking branch, and one controlled updater for your existing Vercel project.
 order: 15
 category: Use your inbox
 ---
 
-**You can keep your Angelos repository private and still receive new releases automatically.** The included **Personal instance updater** GitHub Actions workflow watches [official Angelos releases](https://github.com/amxv/angelos/releases), checks that an update is safe to apply, and deploys it to your own Vercel project.
+This guide is for an **agent operating Git, GitHub CLI (`gh`), and Vercel CLI (`vercel`)** on the owner's behalf. Set up a standalone private repository, preserve its existing Vercel configuration, and use the included **Personal instance updater** to deploy verified [official Angelos releases](https://github.com/amxv/angelos/releases).
 
-There is one setup: create a **private standalone repository** (not a GitHub fork), deploy Angelos once, then turn on the updater. Your mailbox credentials, Redis data, OAuth configuration, passkeys, and production domain stay in your Vercel project, not in the GitHub repository.
+Work through the CLI. Do not ask the owner to visit GitHub Actions, Secrets, or Vercel settings pages when the equivalent CLI operation exists. Browser sign-in or GitHub's **Leave fork network** operation may still require the owner's browser. Never print credentials or put them in a commit, command history, or chat.
 
-If you're using an agent, you can give it this request:
+For an agent starting from a request, use this objective:
 
-> Set up a private standalone copy of [amxv/angelos](https://github.com/amxv/angelos) that follows official stable releases using the included Personal instance updater. Use my GitHub and Vercel accounts. Follow the steps on this page, preserve any existing project, domain, Redis data, secrets, and assistant connections, and never create a public fork. Set up the release-tracking branch, run the workflow in check-only mode first, and ask for approval before enabling automatic production updates. Never put credentials in source code or chat.
+> Set up my private standalone Angelos repository to follow published stable upstream releases through the Personal instance updater. Use Git, `gh`, and `vercel` CLI, inspect the current repository and deployed project first, and preserve all existing source changes, credentials, Redis data, OAuth configuration, passkeys, deployment identity, and assistant connections. Do not create a new Vercel project for an existing installation. Run a check-only update first; obtain my approval before enabling scheduled production deployments.
 
-## 1. Create a private copy of an official release
+## 1. Prepare the private repository
 
-Make a new **empty private repository** in your GitHub account. Copy the latest published stable Angelos release into it, rather than using GitHub's **Fork** button. This creates a standalone repository that GitHub permits you to keep private.
-
-With [GitHub CLI](https://cli.github.com/) signed in, run these commands in a new directory, replacing the username:
+For a **new installation**, create an empty private repository and copy the latest published stable release, **not** the upstream development branch. Never use GitHub's Fork button.
 
 ```bash
-OWNER=YOUR_GITHUB_USERNAME
-TAG=$(gh api repos/amxv/angelos/releases/latest --jq '.tag_name')
+REPO="YOUR_GITHUB_USERNAME/angelos"
+TAG="$(gh api repos/amxv/angelos/releases/latest --jq .tag_name)"
 
-gh repo create "$OWNER/angelos" --private
+gh repo create "$REPO" --private
 git clone --branch "$TAG" --single-branch https://github.com/amxv/angelos.git angelos-private
 cd angelos-private
 git switch -c main
+RELEASE_SHA="$(git rev-parse HEAD)"
 git remote rename origin upstream
-git remote add origin "https://github.com/$OWNER/angelos.git"
+git remote add origin "https://github.com/$REPO.git"
+
+# Upstream's docs-site deployment must not target your personal API project.
+# Do this before the first push so the private repository never runs that job.
+if test -f .github/workflows/docs-deploy.yml; then
+  git rm .github/workflows/docs-deploy.yml
+  git commit -m "ci: exclude upstream docs deployment from personal instance"
+fi
+
 git push -u origin main
-git push origin main:refs/heads/angelos-upstream
+git push origin "$RELEASE_SHA:refs/heads/angelos-upstream"
 ```
 
-You now have two branches in your private repository:
+`main` is your reviewed control branch and is **never overwritten automatically**. `angelos-upstream` starts at the exact official release commit and advances only after a successful verified production update. Do not create `angelos-upstream` from a local customization commit.
 
-| Branch | Purpose |
-| --- | --- |
-| `main` | Holds your reviewed updater workflow and its supporting files. Automatic updates do **not** overwrite it. |
-| `angelos-upstream` | Records the exact official release deployed to production. The updater advances it only after successful deployment and verification. |
+For an **existing installation**, do not rerun the repository creation or cloning commands. Inspect its current GitHub identity, `main` history, source modifications, and live production deployment first. Reuse the existing repository and preserve all custom commits. Create `angelos-upstream` **only if missing**, using the official release commit for the version actually deployed, verified against Vercel, `/healthz`, and upstream Git history. Do not guess that the latest tag is live, reset `main`, force-push, or advance the tracking branch during setup. If an existing repository is still a GitHub fork, it must become a standalone repository before it can be private; complete that separate GitHub detachment safely rather than deleting and recreating it.
 
-For a **new installation**, both branches start at the same official release. If Angelos is **already running**, reuse its existing Vercel project and have your agent set `angelos-upstream` to the *verified official release currently deployed*, not an assumed latest release. Preserve any personal commits on `main`; don't reset or force-push existing branches.
+Check the repository via CLI:
 
-## 2. Deploy Angelos to your Vercel project
+```bash
+gh api "repos/$REPO" --jq '{full_name,private,fork,default_branch}'
+gh api "repos/$REPO/git/ref/heads/angelos-upstream" --jq .object.sha
+```
 
-For a new installation, follow [Connect Your Assistant](/docs/quickstart) to create and configure your Vercel API project, Redis, mailbox, OAuth, and assistant connection. **Import your new private repository instead of a public fork.** Use the repository root as the Vercel Root Directory and make your initial production deployment from the official release you copied in step 1.
+The second command returns 404 until you have created the tracking branch. That is expected on a new setup.
 
-If you already have a working instance, **keep that same Vercel project and production domain**. Do not make another Redis database, rotate secrets, re-enroll passkeys, or reconnect your assistant just to enable updates.
+## 2. Keep the existing Vercel project, and disconnect Git
 
-Once the production instance is configured and working, open **Vercel → your project → Settings → Git → Disconnect**. The updater must be the **only** deployment mechanism: leaving Vercel's Git integration connected could deploy branch pushes without the release checks. Disconnecting Git does not delete your current deployment or environment variables.
+For a new installation only, follow [Connect Your Assistant](/docs/quickstart) to provision your own Vercel API project and configure the mailbox, Redis, OAuth, and initial production deployment. Use `vercel project add`, `vercel link --yes --project PROJECT_NAME --scope SCOPE`, `vercel env add`, and `vercel --prod --yes` from the repository root; do not import the repository through Vercel's Git integration. Verify that your service is working before enabling updates.
 
-Confirm that your production URL's `/healthz` reports Angelos as configured. A healthy response alone does not verify mailbox access; use the read-only assistant check in [Connect Your Assistant](/docs/quickstart) for that.
+For an existing installation, **do not create a project or deploy anything in this step**. Identify and link the *existing* project by name/ID, and verify its identity before changing settings:
 
-## 3. Configure GitHub Actions
+```bash
+vercel project inspect PROJECT_NAME --scope SCOPE
+vercel link --yes --project PROJECT_NAME --scope SCOPE
+VERCEL_ORG_ID="$(jq -er .orgId .vercel/project.json)"
+VERCEL_PROJECT_ID="$(jq -er .projectId .vercel/project.json)"
+vercel api "/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" --raw \
+  | jq '{id,name,link,rootDirectory}'
+```
 
-In your **private repository**, open **Settings → Secrets and variables → Actions** and set:
+Replace `PROJECT_NAME` and `SCOPE` with the **verified existing** project and Vercel account/team scope. Stop if the project ID, owner, or domain does not match the running instance.
 
-| Type | Name | Value |
-| --- | --- | --- |
-| Variable | `ANGELOS_PRODUCTION_URL` | Your stable HTTPS origin, for example `https://my-angelos.vercel.app` (no `/mcp` or trailing path) |
-| Variable | `VERCEL_ORG_ID` | The owner/team ID of your existing Vercel project |
-| Variable | `VERCEL_PROJECT_ID` | That Vercel project's ID |
-| Secret | `VERCEL_TOKEN` | A Vercel token authorized to deploy to that project |
-| Variable | `ANGELOS_AUTO_UPDATE` | Leave unset or `false` until you finish the check-only run |
+If that project's `link` is non-null, disconnect its automatic Git deployments **before pushing any migration changes**:
 
-Your agent can obtain the project IDs from Vercel's project settings or its linked `.vercel/project.json`. Keep the Vercel token in **Actions secrets**, and keep mailbox passwords, signing keys, and Redis credentials in **Vercel environment variables**. Do not copy them into GitHub.
+```bash
+vercel git disconnect --project "$VERCEL_PROJECT_ID" --scope SCOPE --yes
+vercel api "/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" --raw \
+  | jq -e '.link == null'
+```
 
-Enable GitHub Actions for the private repository and allow the included workflow its declared repository permissions, including `contents: write` for advancing `angelos-upstream`. The built-in `GITHUB_TOKEN` is sufficient; **you do not need a personal access token to read the public Angelos upstream**.
+If Git was already disconnected, only run the verification. **`git.deploymentEnabled=false` in `vercel.json` is not a substitute for disconnecting the project**: the personal updater explicitly rejects a connected Git integration. Disconnecting does not remove the current deployment, domain, or environment variables. Confirm the original production URL still serves `/healthz` and that its deployment identity and OAuth issuer did not change.
 
-## 4. Check first, then enable automatic updates
+## 3. Configure Actions using `gh`
 
-In the private repository, go to **Actions → Personal instance updater → Run workflow**:
+Do this against **your private repository**, never `amxv/angelos`. Set the existing Vercel project identifiers and stable production origin, without `/mcp` or other paths:
 
-1. Leave **`apply=false`** and run it. This checks the official release, your tracking branch, and the updater controls without deploying anything. If a newer eligible release exists, it also checks Vercel access and validates the candidate. When you're already on the newest release, there is nothing to build or deploy, so those steps are skipped.
-2. Review any errors before continuing. In particular, the workflow refuses deployment while the Vercel project still has Git integration connected.
-3. When you're ready to authorize future production deployments, change the Actions variable **`ANGELOS_AUTO_UPDATE`** to **`true`**.
+```bash
+REPO="YOUR_GITHUB_USERNAME/angelos"
+PRODUCTION_URL="https://YOUR-EXISTING-ANGELOS-DOMAIN"
 
-That's it. The workflow checks for releases **daily at 04:23 UTC** (GitHub may run scheduled jobs later). You can also run it manually with `apply=true` to apply an eligible release immediately.
+gh variable set ANGELOS_PRODUCTION_URL --repo "$REPO" --body "$PRODUCTION_URL"
+gh variable set VERCEL_ORG_ID --repo "$REPO" --body "$VERCEL_ORG_ID"
+gh variable set VERCEL_PROJECT_ID --repo "$REPO" --body "$VERCEL_PROJECT_ID"
+gh variable set ANGELOS_AUTO_UPDATE --repo "$REPO" --body false
 
-## What happens when a new release is published?
+# Obtain a project-authorized token through a secure credential source.
+# Supply its value to gh via stdin without displaying it.
+printf '%s' "$VERCEL_TOKEN" | gh secret set VERCEL_TOKEN --repo "$REPO"
 
-The workflow fetches the latest **published stable** release from `amxv/angelos`. It verifies the official tag and commit, successful upstream CI, compatibility metadata, and whether any updater-control changes require manual review. It also runs the candidate's Go and documentation checks before any production change.
+gh api "repos/$REPO/actions/permissions" --jq '{enabled,allowed_actions}'
+gh workflow enable personal-update.yml --repo "$REPO"
+gh secret list --repo "$REPO"
+gh variable list --repo "$REPO"
+```
 
-If the release qualifies, GitHub Actions builds it for your **existing Vercel project**, waits until the deployment is ready, promotes it to your production domain, and verifies the running version. **Only then** does it fast-forward `angelos-upstream`. Your private `main`, production domain, environment variables, and Redis data are not replaced by the updater.
+The `VERCEL_TOKEN` shell variable must already be populated securely; do not paste it into a prompt, commit it, or expose it in logs. If repository Actions are disabled, use the GitHub Actions permissions API to enable them without loosening unrelated policies. The updater has a job-scoped `contents: write` permission to advance `angelos-upstream`; no GitHub personal access token is needed to read the public upstream repository.
 
-**The deployed application comes from the official release, not from custom code on your private `main`.** If you make personal application changes, they won't be included in automatic release deployments. Upstream changes to the updater workflow or its privileged supporting files also require you to review and sync those files into `main` before automatic updates resume.
+**Do not set up the upstream API or docs deployment workflows in your private repository.** The only production deployment mechanism for this installation should be `personal-update.yml`. In particular, remove or disable a copied `docs-deploy.yml` before supplying deployment credentials. The upstream-only `VERCEL_API_TOKEN` and `VERCEL_API_PROJECT_ID` are not required; use `VERCEL_TOKEN` and `VERCEL_PROJECT_ID` for your own existing API project.
 
-## If an update stops
+## 4. Run a check-only update before enabling the schedule
 
-Open the failed GitHub Actions run and read its summary. Common causes are a missing secret, still-connected Vercel Git integration, an incompatible release, or updater files that need review. **Do not bypass the checks or force-update a branch.** A failed deployment job may already have changed production; inspect Vercel before retrying. The workflow does not automatically roll back deployments or data migrations.
+```bash
+gh workflow run personal-update.yml --repo "$REPO" --ref main --raw-field apply=false
+gh run list --repo "$REPO" --workflow personal-update.yml --limit 5
+# Inspect the run ID returned above:
+gh run view RUN_ID --repo "$REPO" --log
+```
 
-To pause scheduled deployments, set `ANGELOS_AUTO_UPDATE=false`. Manual check-only runs remain available. After the first successful automatic deployment, verify your assistant can still make an authenticated, read-only mailbox request.
+An `apply=false` run checks release identity, your release-tracking branch, and the updater's trusted control files without deploying or changing production. If a newer eligible release exists, it also verifies the Vercel project and validates the candidate's Go and docs builds. **If the tracking branch is already on the newest release, candidate validation and Vercel checks are skipped**; separately verify the project's disconnected Git integration with the CLI command in step 2.
+
+Only after the owner authorizes automatic production updates, enable the schedule:
+
+```bash
+gh variable set ANGELOS_AUTO_UPDATE --repo "$REPO" --body true
+```
+
+The included workflow checks for new published stable releases daily at **04:23 UTC** (GitHub's scheduled execution may be later). You can explicitly apply an eligible release with `gh workflow run personal-update.yml --repo "$REPO" --ref main --raw-field apply=true`, but **never run `apply=true` without authorization**.
+
+## What the updater does
+
+It verifies the official release tag and commit, successful upstream CI, compatibility metadata, and any changes to privileged updater files. When an update qualifies, it validates the exact official source, builds a staged deployment for **your existing Vercel project**, waits until it is ready, promotes it, verifies the live version, then fast-forwards `angelos-upstream` without force. The update does not replace your private `main` or alter your stored mailbox, OAuth, or Redis credentials.
+
+**Application code deployed by the updater comes from the official release, not custom code on private `main`.** If you customize the app, those changes are not included in automatic release deployments. If a release changes `.github/workflows/personal-update.yml`, `scripts/personal_update.py`, the askpass scripts, or `.github/ci-tools`, review and sync those exact trusted files into private `main` before retrying. Do not blindly sync upstream's other deployment workflows.
+
+For failures, use `gh run view RUN_ID --repo "$REPO" --log` and Vercel CLI to inspect state. A failed workflow may already have promoted a deployment: check before retrying. Do not bypass safety checks, force-update branches, or assume a rollback occurred. Set `ANGELOS_AUTO_UPDATE=false` via `gh variable set` to pause the schedule. After a successful update, verify an authenticated read-only mailbox request using your already-connected assistant.
