@@ -3,7 +3,48 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      api: ${{ steps.filter.outputs.api }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: filter
+        with:
+          filters: |
+            go:
+              - '*.go'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'pkg/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'scripts/**'
+              - 'vercel.json'
+              - '.vercelignore'
+              - '.github/workflows/ci.yml'
+              - '.github/ci-tools/**'
+            api:
+              - '*.go'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'pkg/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'vercel.json'
+              - '.vercelignore'
+              - '.github/workflows/ci.yml'
+              - '.github/ci-tools/**'
   go:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     services:
       redis:
@@ -30,21 +71,64 @@ jobs:
       - run: go vet ./...
       - run: go build ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-  docs:
+  deploy-api:
+    name: Deploy API
+    needs: [changes, go]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.go.result == 'success' &&
+      needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs
+    timeout-minutes: 25
+    concurrency:
+      group: angelos-api-production
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Skip a superseded commit
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$latest" == "$GITHUB_SHA" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'A newer commit is on main. Leaving deployment to its workflow.'
+          fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.current.outputs.deploy == 'true'
         with:
-          bun-version: '1.4.2'
-      - run: bun install --frozen-lockfile
-      - run: bun run check
-      - run: bun run build
+          node-version: '22'
+      # Install from a committed integrity-checked lockfile without lifecycle
+      # scripts, before making the deployment credential available.
+      - name: Install pinned Vercel CLI
+        if: steps.current.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/angelos-vercel"
+          cp .github/ci-tools/package.json .github/ci-tools/package-lock.json "$RUNNER_TEMP/angelos-vercel/"
+          cd "$RUNNER_TEMP/angelos-vercel"
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Deploy tested Go source to API project
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_API_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN" && test -n "$VERCEL_ORG_ID" && test -n "$VERCEL_PROJECT_ID"
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          cli="$RUNNER_TEMP/angelos-vercel/node_modules/.bin/vercel"
+          url=$("$cli" deploy --prod --yes --non-interactive --meta "angelosCommit=$GITHUB_SHA" --token="$VERCEL_TOKEN")
+          case "$url" in https://*.vercel.app) ;; *) echo 'Unexpected Vercel deployment URL'; exit 1 ;; esac
+          "$cli" inspect "$url" --wait --timeout=10m --token="$VERCEL_TOKEN"
   secrets:
     name: Secret scanning
     runs-on: ubuntu-latest
