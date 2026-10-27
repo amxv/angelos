@@ -20,6 +20,7 @@ test('filtered GitHub pushes trigger deployment only for actual site inputs', ()
   assert.match(workflow, /secrets\.VERCEL_TOKEN/);
   assert.match(workflow, /vars\.VERCEL_ORG_ID/);
   assert.match(workflow, /vars\.VERCEL_PROJECT_ID/);
+  assert.match(workflow, /if: github\.repository == 'amxv\/angelos'/);
   assert.match(workflow, /vercel@latest deploy --prebuilt --prod/);
   assert.match(workflow, /working-directory: \./);
   assert.match(workflow, /prepare-prebuilt\.mjs/);
@@ -29,4 +30,19 @@ test('only Actions creates Vercel deployments', () => {
   const config = JSON.parse(readFileSync(path.join(repo, 'docs/vercel.json'), 'utf8'));
   assert.equal(config.git.deploymentEnabled, false);
   assert.equal(Object.hasOwn(config, 'ignoreCommand'), false);
+});
+
+test('API uses a separate action credential and never deploys on docs-only changes', () => {
+  const config = JSON.parse(readFileSync(path.join(repo, 'vercel.json'), 'utf8'));
+  const ci = readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf8');
+  assert.equal(config.git.deploymentEnabled, false);
+  assert.equal(Object.hasOwn(config, 'ignoreCommand'), false);
+  const apiPaths = ci.match(/^            api:\n((?:^              - .+\n)+)/m)?.[1];
+  assert.ok(apiPaths, 'missing API path filter');
+  assert.match(apiPaths, /'internal\/\*\*'/);
+  assert.doesNotMatch(apiPaths, /docs/);
+  assert.match(ci, /needs\.go\.result == 'success'/);
+  assert.match(ci, /needs\.changes\.outputs\.api == 'true'/);
+  assert.match(ci, /secrets\.VERCEL_API_TOKEN/);
+  assert.match(ci, /vars\.VERCEL_API_PROJECT_ID/);
 });
