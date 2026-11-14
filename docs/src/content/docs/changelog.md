@@ -17,8 +17,9 @@ An **Unreleased** entry describes work being prepared, not a published release. 
 - The consent screen marks a loopback return address as an app on the owner's device. Its form policy permits only that exact callback origin.
 - Each pinned metadata identity now has its own fetch cache and failure backoff. The shared outbound-fetch limit, pinned hosts, size limit, and no-redirect rules are unchanged.
 - **Security:** updated the Go build and CI toolchain to 1.27.4 for the reachable `net/http` vulnerability [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859), and `golang.org/x/net` to 0.62.0 for the reachable HTML-parsing vulnerability [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860). The x/net update also raises the indirect `golang.org/x/crypto`, `sync`, `sys`, and `text` modules to their required minimum versions. See [testing](/docs/testing).
+- Upstream CI now deploys the API only after Go CI passes on a change that affects the API, and both the API and docs deployment jobs run only in the upstream repository, so personal clones no longer attempt upstream deployments.
 
-**Upgrade notes:** No migration is required. Both new switches default off, so existing deployments, grants, and assistant connections behave as before. To connect a CLI, set its switch to `1` and redeploy Production. Existing deployments must be rebuilt and redeployed with the patched toolchain to receive the standard-library fix.
+**Upgrade notes:** No migration is required. Both new switches default off, so existing deployments, grants, and assistant connections behave as before. To connect a CLI, set its switch to `1` and redeploy Production. Existing deployments must be rebuilt and redeployed with the patched toolchain to receive the standard-library fix. The personal updater controls are unchanged, so private standalone repositories can update automatically. Public forks must review and sync the changed CI and docs workflows before automatic updates resume; see [Keep Angelos updated](/docs/keep-updated).
 
 ## 0.11.2 — Released 2026-10-26
 

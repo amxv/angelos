@@ -3,5 +3,5 @@
   "automatic": true,
   "config_epoch": 1,
   "state_epoch": 1,
-  "notes": "Private standalone repositories can track tagged upstream releases on a separate angelos-upstream branch while preserving their own main. Existing OAuth, Redis, mailbox state, and configuration remain compatible. Updated personal updater controls require reviewed manual sync before enabling automatic updates."
+  "notes": "Adds opt-in Claude Code and Codex CLI sign-in (both switches default off) and ships the Go 1.27.4 and golang.org/x/net 0.62.0 security fixes, which apply only after a rebuild and redeploy. Existing OAuth, Redis, mailbox state, and configuration remain compatible. Upstream CI and docs workflows changed but the personal updater controls did not; public forks must review and sync the workflow changes before automatic updates resume."
 }
