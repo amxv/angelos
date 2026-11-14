@@ -10,6 +10,15 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
+## 0.12.0 — Unreleased
+
+- Added sign-in for the **Claude Code** and **Codex** command-line agents. Before this change, both CLIs failed at `/oauth/authorize` with `invalid_client`: they register through their own Client ID Metadata Documents and receive the response on a loopback listener, and Angelos accepted only ChatGPT's metadata identity and HTTPS callbacks. New opt-in switches, `ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED` and `ANGELOS_OAUTH_CODEX_CIMD_ENABLED`, enable only each CLI's pinned identity. See [Connect Claude Code or Codex](/docs/claude-code-codex).
+- Predefined clients in `ANGELOS_OAUTH_CLIENTS_JSON` can now register port-free loopback callbacks, such as `http://localhost/callback`, for command-line clients configured with an explicit client ID. Any login-time port is accepted, as RFC 8252 section 7.3 requires; the host, path, and query still match exactly, and the code exchange must repeat the exact callback. See [client validation](/docs/oauth-reference#client-validation).
+- The consent screen marks a loopback return address as an app on the owner's device. Its form policy permits only that exact callback origin.
+- Each pinned metadata identity now has its own fetch cache and failure backoff. The shared outbound-fetch limit, pinned hosts, size limit, and no-redirect rules are unchanged.
+
+**Upgrade notes:** No migration is required. Both new switches default off, so existing deployments, grants, and assistant connections behave as before. To connect a CLI, set its switch to `1` and redeploy Production.
+
 ## 0.11.2 — Released 2026-10-26
 
 [Published release](https://github.com/amxv/angelos/releases/tag/v0.11.2) · [Source at v0.11.2](https://github.com/amxv/angelos/commit/e1a0b156d4140d960113c1c616e011676ca89a73)

@@ -17,7 +17,57 @@ import (
 const (
 	ChatGPTClientID    = "https://chatgpt.com/oauth/client.json"
 	ChatGPTRedirectURI = "https://chatgpt.com/connector_platform_oauth_redirect"
+	// Native CLI identities publish port-free loopback callbacks. Each login
+	// adds its local listener port, which loopback matching accepts.
+	ClaudeCodeClientID = "https://claude.ai/oauth/claude-code-client-metadata"
+	CodexClientID      = "https://chatgpt.com/oauth/codex/client.json"
 )
+
+// metadataClient is one exact Client ID Metadata Document this server may
+// fetch. The ID is the only URL fetched, Host is the only dial destination, and
+// Redirects is the complete callback allowlist; documents cannot widen it.
+type metadataClient struct {
+	ID        string
+	Name      string
+	Host      string
+	Redirects []string
+}
+
+var metadataClients = []metadataClient{
+	{ID: ChatGPTClientID, Name: "ChatGPT", Host: "chatgpt.com", Redirects: []string{ChatGPTRedirectURI}},
+	{ID: ClaudeCodeClientID, Name: "Claude Code", Host: "claude.ai", Redirects: []string{"http://localhost/callback", "http://127.0.0.1/callback"}},
+	{ID: CodexClientID, Name: "Codex", Host: "chatgpt.com", Redirects: []string{"http://127.0.0.1/callback", "http://localhost/callback"}},
+}
+
+type metadataCacheEntry struct {
+	client     *Client
+	until      time.Time
+	retryAfter time.Time
+}
+
+// metadataClient returns the pinned identity only when its operator switch is on.
+func (c Config) metadataClient(id string) (metadataClient, bool) {
+	enabled := map[string]bool{ChatGPTClientID: c.EnableChatGPTCIMD, ClaudeCodeClientID: c.EnableClaudeCodeCIMD, CodexClientID: c.EnableCodexCIMD}
+	for _, client := range metadataClients {
+		if client.ID == id && enabled[id] {
+			return client, true
+		}
+	}
+	return metadataClient{}, false
+}
+
+func (c Config) metadataClientsEnabled() bool {
+	return c.EnableChatGPTCIMD || c.EnableClaudeCodeCIMD || c.EnableCodexCIMD
+}
+
+func reservedClientID(id string) bool {
+	for _, client := range metadataClients {
+		if client.ID == id {
+			return true
+		}
+	}
+	return false
+}
 
 // Client is an operator-predefined public client. Exact redirect URIs must be
 // copied from the client's connection UI; wildcard and guessed callbacks fail.
@@ -33,17 +83,19 @@ func (c Client) validate() error {
 	}
 	seen := map[string]bool{}
 	for _, redirect := range c.RedirectURIs {
-		if !validRedirect(redirect) || seen[redirect] {
-			return errors.New("OAuth clients require exact HTTPS redirect URIs")
+		if !(validRedirect(redirect) || validLoopbackRedirect(redirect)) || seen[redirect] {
+			return errors.New("OAuth clients require exact HTTPS redirect URIs or port-free loopback callbacks such as http://localhost/callback")
 		}
 		seen[redirect] = true
 	}
 	return nil
 }
 
+// allowsRedirect is exact for HTTPS callbacks. A registered port-free loopback
+// callback also matches the same callback with a login-time port (RFC 8252).
 func (c Client) allowsRedirect(redirect string) bool {
 	for _, allowed := range c.RedirectURIs {
-		if redirect == allowed {
+		if redirect == allowed || loopbackRedirectMatches(allowed, redirect) {
 			return true
 		}
 	}
@@ -56,7 +108,8 @@ func (s *Server) knownClient(id string) bool {
 			return true
 		}
 	}
-	return s.config.EnableChatGPTCIMD && id == ChatGPTClientID
+	_, ok := s.config.metadataClient(id)
+	return ok
 }
 
 // Token redemption relies on the immutable client binding established by a
@@ -69,8 +122,8 @@ func (s *Server) tokenClient(id string) (Client, error) {
 			return client, nil
 		}
 	}
-	if s.config.EnableChatGPTCIMD && id == ChatGPTClientID {
-		return Client{ID: ChatGPTClientID, Name: "ChatGPT", RedirectURIs: []string{ChatGPTRedirectURI}}, nil
+	if pinned, ok := s.config.metadataClient(id); ok {
+		return Client{ID: pinned.ID, Name: pinned.Name, RedirectURIs: append([]string(nil), pinned.Redirects...)}, nil
 	}
 	return Client{}, errors.New("unknown OAuth client")
 }
@@ -81,17 +134,22 @@ func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 			return c, nil
 		}
 	}
-	if !s.config.EnableChatGPTCIMD || id != ChatGPTClientID {
+	pinned, ok := s.config.metadataClient(id)
+	if !ok {
 		return Client{}, errors.New("unknown OAuth client")
 	}
-	// This endpoint is the entire allowlist. Never fetch a request-provided URL,
-	// logo, client_uri, jwks_uri, or redirect and never follow HTTP redirects.
+	// The pinned endpoints are the entire allowlist. Never fetch a request-provided
+	// URL, logo, client_uri, jwks_uri, or redirect and never follow HTTP redirects.
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
-	if s.cachedClient != nil && s.now().Before(s.clientCacheUntil) {
-		return *s.cachedClient, nil
+	if s.metadataCache == nil {
+		s.metadataCache = map[string]metadataCacheEntry{}
 	}
-	if s.now().Before(s.clientRetryAfter) {
+	entry := s.metadataCache[pinned.ID]
+	if entry.client != nil && s.now().Before(entry.until) {
+		return *entry.client, nil
+	}
+	if s.now().Before(entry.retryAfter) {
 		return Client{}, errors.New("client metadata temporarily unavailable")
 	}
 	// Bound outbound work across stateless instances, not requests by public
@@ -101,13 +159,11 @@ func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 	}
 	success := false
 	defer func() {
-		if success {
-			s.clientRetryAfter = time.Time{}
-		} else {
-			s.clientRetryAfter = s.now().Add(5 * time.Second)
+		if !success {
+			s.metadataCache[pinned.ID] = metadataCacheEntry{retryAfter: s.now().Add(5 * time.Second)}
 		}
 	}()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ChatGPTClientID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pinned.ID, nil)
 	if err != nil {
 		return Client{}, err
 	}
@@ -135,8 +191,8 @@ func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 		Grants      []string `json:"grant_types"`
 		Responses   []string `json:"response_types"`
 	}
-	if strictJSON(data, &metadata) != nil || metadata.ID != ChatGPTClientID || metadata.Name != "ChatGPT" || len(metadata.RedirectURIs) == 0 || len(metadata.RedirectURIs) > 8 {
-		return Client{}, errors.New("invalid ChatGPT client metadata")
+	if strictJSON(data, &metadata) != nil || metadata.ID != pinned.ID || metadata.Name != pinned.Name || len(metadata.RedirectURIs) == 0 || len(metadata.RedirectURIs) > 8 {
+		return Client{}, errors.New("invalid pinned client metadata")
 	}
 	var exact map[string]json.RawMessage
 	if json.Unmarshal(data, &exact) != nil || exact["client_id"] == nil || exact["client_name"] == nil || exact["redirect_uris"] == nil || exact["grant_types"] == nil || exact["response_types"] == nil {
@@ -158,15 +214,22 @@ func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 	if len(methods) == 0 {
 		methods = []string{metadata.AuthMethod}
 	}
-	if !contains(methods, "none") || !contains(metadata.Grants, "authorization_code") || !contains(metadata.Grants, "refresh_token") || !contains(metadata.Responses, "code") || !metadata.allowsRedirect(ChatGPTRedirectURI) {
-		return Client{}, errors.New("ChatGPT client metadata does not support the configured public-client flow")
+	if !contains(methods, "none") || !contains(metadata.Grants, "authorization_code") || !contains(metadata.Grants, "refresh_token") || !contains(metadata.Responses, "code") {
+		return Client{}, errors.New("pinned client metadata does not support the configured public-client flow")
 	}
+	// Every published callback must already be pinned, compared byte for byte.
+	// The usable set is the pinned callbacks the document still publishes.
 	for _, redirect := range metadata.RedirectURIs {
-		if redirect != ChatGPTRedirectURI {
-			return Client{}, errors.New("unexpected ChatGPT client redirect URI")
+		if !contains(pinned.Redirects, redirect) {
+			return Client{}, errors.New("unexpected pinned client redirect URI")
 		}
 	}
-	client := Client{ID: ChatGPTClientID, Name: "ChatGPT", RedirectURIs: []string{ChatGPTRedirectURI}}
+	client := Client{ID: pinned.ID, Name: pinned.Name}
+	for _, redirect := range pinned.Redirects {
+		if contains(metadata.RedirectURIs, redirect) {
+			client.RedirectURIs = append(client.RedirectURIs, redirect)
+		}
+	}
 	// A bounded cache never extends stale metadata after a retrieval failure.
 	// no-store/no-cache causes the document to be revalidated on the next request.
 	ttl := 5 * time.Minute
@@ -182,8 +245,9 @@ func (s *Server) resolveClient(ctx context.Context, id string) (Client, error) {
 			}
 		}
 	}
-	s.cachedClient = &client
-	s.clientCacheUntil = s.now().Add(ttl)
+	cached := client
+	cached.RedirectURIs = append([]string(nil), client.RedirectURIs...)
+	s.metadataCache[pinned.ID] = metadataCacheEntry{client: &cached, until: s.now().Add(ttl)}
 	success = true
 	return client, nil
 }
@@ -213,7 +277,7 @@ func metadataHTTPClient(test *http.Client) *http.Client {
 			IdleConnTimeout:        time.Minute,
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				host, port, err := net.SplitHostPort(address)
-				if err != nil || host != "chatgpt.com" || port != "443" {
+				if err != nil || !metadataHost(host) || port != "443" {
 					return nil, errors.New("unapproved client metadata destination")
 				}
 				ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
@@ -237,6 +301,16 @@ func metadataHTTPClient(test *http.Client) *http.Client {
 	client.Timeout = 5 * time.Second
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return errors.New("client metadata redirects denied") }
 	return &client
+}
+
+// metadataHost permits only the fixed hosts of pinned metadata documents.
+func metadataHost(host string) bool {
+	for _, client := range metadataClients {
+		if host == client.Host {
+			return true
+		}
+	}
+	return false
 }
 
 func metadataPublicIP(ip netip.Addr) bool {

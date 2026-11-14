@@ -16,16 +16,14 @@ import (
 )
 
 type Server struct {
-	config           Config
-	store            Store
-	keys             signingKeys
-	browser          *Browser
-	now              func() time.Time
-	clientHTTP       *http.Client
-	clientMu         sync.Mutex
-	cachedClient     *Client
-	clientCacheUntil time.Time
-	clientRetryAfter time.Time
+	config        Config
+	store         Store
+	keys          signingKeys
+	browser       *Browser
+	now           func() time.Time
+	clientHTTP    *http.Client
+	clientMu      sync.Mutex
+	metadataCache map[string]metadataCacheEntry
 }
 
 // New never generates signing keys or substitutes an in-memory store. Invalid
@@ -78,7 +76,7 @@ func (s *Server) Handler() http.Handler {
 				"response_types_supported": []string{"code"}, "response_modes_supported": []string{"query"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
 				"code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": []string{"none"},
 				"scopes_supported": []string{ScopeRead, ScopeWrite, ScopeSend}, "authorization_response_iss_parameter_supported": true,
-				"client_id_metadata_document_supported": s.config.EnableChatGPTCIMD,
+				"client_id_metadata_document_supported": s.config.metadataClientsEnabled(),
 			})
 		case JWKSPath:
 			if !getOnly(w, r) {
@@ -250,7 +248,7 @@ func (s *Server) DenyAuthorization(a AuthorizationRequest) string {
 
 func (s *Server) authorizationRedirect(a AuthorizationRequest, kind, value string) string {
 	u, err := url.Parse(a.RedirectURI)
-	if err != nil || !validRedirect(a.RedirectURI) {
+	if err != nil || !validCallback(a.RedirectURI) {
 		return s.config.Issuer + "/oauth/login"
 	}
 	q := u.Query()

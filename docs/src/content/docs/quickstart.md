@@ -6,11 +6,11 @@ order: 1
 category: Get started
 ---
 
-**Ask your agent to set up Angelos in your own accounts.** It handles the fork, hosting, configuration, and verification; you complete account approvals, secure credential entry, passkeys, and assistant consent. This guide configures reading, mailbox changes, sending, and supported permanent deletion together, so your assistant is ready for the whole workflow. ChatGPT and Claude.ai connection examples are included.
+**Ask your agent to set up Angelos in your own accounts.** It handles the fork, hosting, configuration, and verification; you complete account approvals, secure credential entry, passkeys, and assistant consent. This guide configures reading, mailbox changes, sending, and supported permanent deletion together, so your assistant is ready for the whole workflow. ChatGPT and Claude.ai connection examples are included; for the Claude Code and Codex command-line agents, see [Connect Claude Code or Codex](/docs/claude-code-codex).
 
 Give your agent this request, filling in the non-secret details:
 
-> Set up my personal Angelos instance using this guide. Use my GitHub account, Vercel account, and Upstash account. My mailbox provider is [provider] and my email address is [address]. My assistant is [ChatGPT, Claude.ai, or another compatible client]. Reuse any existing Angelos setup after checking it belongs to this instance. Configure all supported capabilities and request mail.read, mail.write, and mail.send at initial consent. Explain permanent deletion, obtain the required approvals, and use secure credential entry when needed; never ask me to paste passwords or tokens into chat. Verify the production endpoint and an authenticated mailbox read, then give me the exact MCP URL. Offer automatic updates after the connection works.
+> Set up my personal Angelos instance using this guide. Use my GitHub account, Vercel account, and Upstash account. My mailbox provider is [provider] and my email address is [address]. My assistant is [ChatGPT, Claude.ai, Claude Code, Codex, or another compatible client]. Reuse any existing Angelos setup after checking it belongs to this instance. Configure all supported capabilities and request mail.read, mail.write, and mail.send at initial consent. Explain permanent deletion, obtain the required approvals, and use secure credential entry when needed; never ask me to paste passwords or tokens into chat. Verify the production endpoint and an authenticated mailbox read, then give me the exact MCP URL. Offer automatic updates after the connection works.
 
 Your agent should follow the sequential checklist below. The repository also includes a [setup skill](https://github.com/amxv/angelos/blob/main/.agents/skills/setup-personal-angelos/SKILL.md) for coding agents; this page remains the complete setup guide. These are instructions for provisioning, not evidence that any accounts have already been configured.
 
@@ -297,12 +297,13 @@ Choose the assistant client configuration now, before deploying:
 - **ChatGPT:** keep `ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED=1`. This enables only its pinned metadata identity.
 - **Claude.ai:** add the predefined public client below to `ANGELOS_OAUTH_CLIENTS_JSON`. Use this exact callback. If you only use Claude, set the ChatGPT switch to `0`.
 - **Both:** keep the ChatGPT switch on and add the Claude entry. Preserve all existing approved entries when editing the JSON array.
+- **Claude Code or Codex CLI:** also set `ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED=1` or `ANGELOS_OAUTH_CODEX_CIMD_ENABLED=1`. Each enables only that CLI's pinned metadata identity, which returns to a temporary listener on your computer. See [Connect Claude Code or Codex](/docs/claude-code-codex).
 
 ```json
 [{"client_id":"angelos-claude","client_name":"Claude","redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}]
 ```
 
-The client ID is a non-secret label. These public clients use PKCE S256 and no client secret. Leave `ANGELOS_OAUTH_VERIFICATION_KEYS_JSON` unset unless performing a deliberate key rotation. Other clients need an exact approved HTTPS callback and compatible public-client OAuth; there is no arbitrary dynamic registration. See [client validation](/docs/oauth-reference#client-validation).
+The client ID is a non-secret label. These public clients use PKCE S256 and no client secret. Leave `ANGELOS_OAUTH_VERIFICATION_KEYS_JSON` unset unless performing a deliberate key rotation. Other clients need an exact approved HTTPS callback, or a port-free loopback callback for a command-line client, and compatible public-client OAuth; there is no arbitrary dynamic registration. See [client validation](/docs/oauth-reference#client-validation).
 
 **Agent does:** once configuration is complete, **redeploy Production** and wait for its terminal status. Saving environment variables alone does not update an existing deployment. The application reads the runtime environment, not a local `.env` file. [Vercel environment variables](https://vercel.com/docs/environment-variables)
 
@@ -353,7 +354,18 @@ The pinned identity is `https://chatgpt.com/oauth/client.json`, with callback `h
 2. Choose **Sign in now** for authentication and **Use your own OAuth client**. Enter `angelos-claude`, matching the predefined client configured in step 4. Leave the client secret blank.
 3. Complete Angelos passkey sign-in and full-scope consent, then enable the connector in your conversation.
 
-Use the exact hosted callback `https://claude.ai/api/mcp/auth_callback`; the built-in server does not accept Claude Code’s HTTP loopback callbacks. Labels and workspace controls can change. See [Claude’s connection instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) and [OAuth requirements](https://claude.com/docs/connectors/building/authentication). Do not select automatic registration: Angelos does not expose that endpoint.
+Use the exact hosted callback `https://claude.ai/api/mcp/auth_callback`. Claude Code uses its own pinned identity instead; see [Connect Claude Code or Codex](/docs/claude-code-codex). Labels and workspace controls can change. See [Claude’s connection instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) and [OAuth requirements](https://claude.com/docs/connectors/building/authentication). Do not select automatic registration: Angelos does not expose that endpoint.
+
+### Claude Code and Codex example
+
+With the matching switch from step 4 enabled, add the verified MCP URL from your terminal and sign in with your passkey in the browser window that opens:
+
+```bash
+claude mcp add --transport http --scope user angelos https://my-angelos.vercel.app/mcp && claude mcp login angelos
+codex mcp add angelos --url https://my-angelos.vercel.app/mcp
+```
+
+See [Connect Claude Code or Codex](/docs/claude-code-codex) for consent details, the predefined-client alternative, and troubleshooting.
 
 ### Verify the connection without changing mail
 
@@ -383,7 +395,7 @@ Once the first connection works, ask your agent to configure [Keep Angelos updat
 | Vercel page instead of JSON | Confirm the API project root is the repository root, the domain targets it, and production deployment protection permits OAuth discovery. |
 | Health says `configured: false`, or MCP returns 503 | Check production variables, exact matching URLs, full PEM, mailbox mode, Redis URL/token, and redeploy after edits. |
 | Health works, passkey enrollment fails | Use the configured production domain and fresh enrollment form; check Redis access and the SHA-256 hash of the exact raw token text. |
-| Assistant says unknown client or invalid redirect | Verify the selected client ID and exact callback against step 4; preserve other clients when updating the JSON array. |
+| Assistant says unknown client or invalid redirect | Verify the selected client ID and exact callback against step 4; preserve other clients when updating the JSON array. For Claude Code or Codex, check its metadata switch. |
 | Sign-in works, mail fails | Check provider credentials, IMAP access, TLS hostnames, and Google/Microsoft grant or administrator restrictions. Health does not test these. |
 | Mail changes or preparation are denied | Check both scopes and server switches; refresh your assistant’s tool definitions after an upgrade. |
 | Access stops after working | Check Redis quotas/outages, provider grant expiry, and your connected OAuth grant. Reconnect when its lifetime ends. |
@@ -392,12 +404,12 @@ Keep secrets and message contents out of support logs. Do not disable authentica
 
 ### Another compatible client
 
-Angelos is client-neutral at the MCP layer, but each client must support its OAuth contract: authorization code, PKCE S256, public-client token authentication (`none`), exact resource audience, and an explicitly allowed HTTPS redirect. Choose a non-secret client ID and add it to `ANGELOS_OAUTH_CLIENTS_JSON`, preserving existing entries:
+Angelos is client-neutral at the MCP layer, but each client must support its OAuth contract: authorization code, PKCE S256, public-client token authentication (`none`), exact resource audience, and an explicitly allowed HTTPS redirect or port-free loopback callback. Choose a non-secret client ID and add it to `ANGELOS_OAUTH_CLIENTS_JSON`, preserving existing entries:
 
 ```json
 [{"client_id":"angelos-my-assistant","client_name":"My assistant","redirect_uris":["REPLACE_WITH_EXACT_VERIFIED_HTTPS_CALLBACK"]}]
 ```
 
-Redeploy, enter the same client ID in the assistant, leave its client secret blank, and request `mail.read mail.write mail.send`. Keep pinned ChatGPT metadata enabled if another connection uses it. If a client requires a secret, static API key, dynamic registration, or HTTP loopback callback, this built-in flow does not support it. Do not guess callback URLs, add wildcards, or weaken authorization. Another compatible external issuer is an advanced alternative, not an authentication bypass.
+Redeploy, enter the same client ID in the assistant, leave its client secret blank, and request `mail.read mail.write mail.send`. Keep pinned ChatGPT metadata enabled if another connection uses it. A command-line client that listens on your computer can register a port-free loopback callback such as `http://127.0.0.1/callback`; any login-time port is accepted. If a client requires a secret, static API key, or dynamic registration, this built-in flow does not support it. Do not guess callback URLs, add wildcards, or weaken authorization. Another compatible external issuer is an advanced alternative, not an authentication bypass.
 
 For protocol limits, external identity providers, signing-key rotation, and recovery, use the [OAuth reference](/docs/oauth-reference). For every variable and advanced hosting constraints, use the [Configuration reference](/docs/configuration).

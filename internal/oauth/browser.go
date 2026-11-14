@@ -156,10 +156,11 @@ func (b *Browser) render(w http.ResponseWriter, page browserPage) {
 	// with the exact Origin and CSRF validation on every browser POST.
 	w.Header().Set("Referrer-Policy", "same-origin")
 	// Browsers may apply form-action to the entire POST redirect chain. Permit
-	// only the already-validated client's exact HTTPS callback origin here.
+	// only the already-validated client's exact callback origin here: its HTTPS
+	// origin, or a native client's loopback origin including its login-time port.
 	if page.Page == "consent" {
 		callback, err := url.Parse(page.Request.RedirectURI)
-		if err != nil || !validRedirect(page.Request.RedirectURI) {
+		if err != nil || !validCallback(page.Request.RedirectURI) {
 			browserError(w, 500, "Invalid consent destination.")
 			return
 		}
@@ -387,7 +388,7 @@ func (b *Browser) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/oauth/login", http.StatusSeeOther)
 }
 
-var browserTemplate = template.Must(template.New("browser").Funcs(template.FuncMap{"join": strings.Join}).Parse(`<!doctype html>
+var browserTemplate = template.Must(template.New("browser").Funcs(template.FuncMap{"join": strings.Join, "loopback": isLoopbackCallback}).Parse(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -438,7 +439,7 @@ var browserTemplate = template.Must(template.New("browser").Funcs(template.FuncM
           </section>
           <details class="connection-details">
             <summary>Connection details <span class="chevron" aria-hidden="true"></span></summary>
-            <dl class="connection-list"><dt>Client identity</dt><dd>{{.Request.ClientID}}</dd><dt>Return address</dt><dd>{{.Request.RedirectURI}}</dd><dt>Resource</dt><dd>{{.Request.Resource}}</dd></dl>
+            <dl class="connection-list"><dt>Client identity</dt><dd>{{.Request.ClientID}}</dd><dt>Return address</dt><dd>{{.Request.RedirectURI}}{{if loopback .Request.RedirectURI}} (an app on this device){{end}}</dd><dt>Resource</dt><dd>{{.Request.Resource}}</dd></dl>
           </details>
           <form action="/oauth/consent" method="post" class="consent-form">
             <input type="hidden" name="csrf" value="{{.CSRF}}">

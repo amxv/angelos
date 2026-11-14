@@ -245,7 +245,7 @@ func TestExistingCIMDGrantSurvivesMetadataOutageButNotDisabledClient(t *testing.
 	}
 	u, _ := url.Parse(redirect)
 	p := url.Values{"grant_type": {"authorization_code"}, "client_id": {a.ClientID}, "resource": {s.config.Resource}, "redirect_uri": {a.RedirectURI}, "code": {u.Query().Get("code")}, "code_verifier": {verifier}}
-	s.clientCacheUntil = time.Time{}
+	clear(s.metadataCache)
 	s.clientHTTP.Transport = coreRoundTripper(func(*http.Request) (*http.Response, error) {
 		t.Error("token flow fetched metadata")
 		return nil, ErrUnavailable
@@ -322,7 +322,7 @@ func TestCIMDCachedMetadataDoesNotSpendFetchBudget(t *testing.T) {
 			t.Fatal("cached client blocked by fetch quota", err)
 		}
 	}
-	s.clientCacheUntil = time.Time{}
+	clear(s.metadataCache)
 	if _, err := s.resolveClient(context.Background(), ChatGPTClientID); !errors.Is(err, ErrRateLimited) {
 		t.Fatal("unbounded outbound metadata fetch", err)
 	}

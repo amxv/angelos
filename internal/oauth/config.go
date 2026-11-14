@@ -50,7 +50,10 @@ type Config struct {
 	BootstrapTokenHash  string
 	Clients             []Client
 	EnableChatGPTCIMD   bool
-	HTTPClient          *http.Client
+	// Native CLI metadata identities use loopback callbacks on the owner's device.
+	EnableClaudeCodeCIMD bool
+	EnableCodexCIMD      bool
+	HTTPClient           *http.Client
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -67,6 +70,9 @@ func ConfigFromEnv() (Config, error) {
 		SigningKeyID:       os.Getenv("ANGELOS_OAUTH_SIGNING_KEY_ID"),
 		BootstrapTokenHash: os.Getenv("ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH"),
 		EnableChatGPTCIMD:  os.Getenv("ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED") == "1",
+		// Claude Code and Codex CLI sign-in through their pinned metadata documents.
+		EnableClaudeCodeCIMD: os.Getenv("ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED") == "1",
+		EnableCodexCIMD:      os.Getenv("ANGELOS_OAUTH_CODEX_CIMD_ENABLED") == "1",
 	}
 	if os.Getenv("MCP_OAUTH_JWKS_URL") != c.Issuer+JWKSPath {
 		return Config{}, errors.New("MCP_OAUTH_JWKS_URL must exactly equal MCP_OAUTH_ISSUER + /oauth/jwks.json")
@@ -121,7 +127,7 @@ func (c Config) validate() error {
 			return errors.New("bootstrap token hash must be a lowercase SHA-256 digest")
 		}
 	}
-	if len(c.Clients) > 16 || (len(c.Clients) == 0 && !c.EnableChatGPTCIMD) {
+	if len(c.Clients) > 16 || (len(c.Clients) == 0 && !c.metadataClientsEnabled()) {
 		return errors.New("at least one explicitly configured OAuth client is required")
 	}
 	seen := map[string]bool{}
@@ -129,7 +135,7 @@ func (c Config) validate() error {
 		if err := client.validate(); err != nil {
 			return err
 		}
-		if seen[client.ID] || client.ID == ChatGPTClientID {
+		if seen[client.ID] || reservedClientID(client.ID) {
 			return errors.New("duplicate or reserved OAuth client ID")
 		}
 		seen[client.ID] = true

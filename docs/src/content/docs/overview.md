@@ -44,6 +44,7 @@ It also does not manage mail accounts, provider filtering rules, or desktop-only
 ## Choose your next step
 
 - **I’m getting started:** follow [Connect Your Assistant](/docs/quickstart), from deployment to your first request in ChatGPT, Claude.ai, or a compatible assistant.
+- **I use Claude Code or Codex:** connect your existing instance with [Connect Claude Code or Codex](/docs/claude-code-codex).
 - **I want updates handled for me:** use [Keep Angelos updated](/docs/keep-updated) after your first connection works.
 - **I want everyday examples:** open [Work with your inbox](/docs/inbox-guide) or [Write and send mail](/docs/sending-guide).
 - **I am building an agent:** use the [Agent playbook](/docs/agent-guide), then the [tool reference](/docs/tools).

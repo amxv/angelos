@@ -103,8 +103,10 @@ Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enab
 | `ANGELOS_OAUTH_SIGNING_KEY_PEM` | Required when enabled | Durable ES256 P-256 private key as PKCS#8 or EC PEM; sensitive API runtime secret |
 | `ANGELOS_OAUTH_SIGNING_KEY_ID` | Required when enabled | Stable, unique active signing-key ID (`kid`) |
 | `ANGELOS_OAUTH_VERIFICATION_KEYS_JSON` | Empty | Optional JSON object mapping up to four retiring key IDs to PKIX public-key PEM strings |
-| `ANGELOS_OAUTH_CLIENTS_JSON` | Empty | Predefined public-client array with `client_id`, `client_name`, and exact `redirect_uris` |
+| `ANGELOS_OAUTH_CLIENTS_JSON` | Empty | Predefined public-client array with `client_id`, `client_name`, and exact HTTPS or port-free loopback `redirect_uris` |
 | `ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED` | Disabled | `1` enables only the pinned ChatGPT metadata identity described in the runbook |
+| `ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED` | Disabled | `1` enables only Claude Code's pinned metadata identity, with loopback callbacks; see [Connect Claude Code or Codex](/docs/claude-code-codex) |
+| `ANGELOS_OAUTH_CODEX_CIMD_ENABLED` | Disabled | `1` enables only the Codex CLI's pinned metadata identity, with loopback callbacks |
 | `ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH` | Empty | Lowercase SHA-256 hex digest of the high-entropy one-time owner-enrollment token; remove after enrollment |
 
 Configure an allowed client before connecting. First-party mode does not expose dynamic client registration, passwords, or public account signup. The cookie name, secure flags, and session lifetimes are fixed; the relying-party ID and allowed origin come from the explicitly configured issuer; there is no cookie signing secret or permissive development override. See [owner setup and recovery](/docs/oauth-reference#owner-recovery).
