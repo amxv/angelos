@@ -3,5 +3,5 @@
   "automatic": true,
   "config_epoch": 1,
   "state_epoch": 1,
-  "notes": "Adds opt-in Claude Code and Codex CLI sign-in (both switches default off) and ships the Go 1.27.4 and golang.org/x/net 0.62.0 security fixes, which apply only after a rebuild and redeploy. Existing OAuth, Redis, mailbox state, and configuration remain compatible. Upstream CI and docs workflows changed but the personal updater controls did not; public forks must review and sync the workflow changes before automatic updates resume."
+  "notes": "Fixes MCP requests that could wait for tool-list change notifications until the host timed out, and adds opt-in Claude.ai custom connector sign-in with default OAuth settings (ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED, default off). Existing OAuth, Redis, mailbox state, and configuration remain compatible. No workflow or updater control changes since 0.12.0."
 }
