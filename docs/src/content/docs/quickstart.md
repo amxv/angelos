@@ -295,8 +295,9 @@ Use lowercase hostnames and no trailing slashes. The issuer is just your HTTPS o
 Choose the assistant client configuration now, before deploying:
 
 - **ChatGPT:** keep `ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED=1`. This enables only its pinned metadata identity.
-- **Claude.ai:** add the predefined public client below to `ANGELOS_OAUTH_CLIENTS_JSON`. Use this exact callback. If you only use Claude, set the ChatGPT switch to `0`.
-- **Both:** keep the ChatGPT switch on and add the Claude entry. Preserve all existing approved entries when editing the JSON array.
+- **Claude.ai:** set `ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED=1`. This enables only Claude's pinned metadata identity, which Claude on the web, Desktop, and mobile use when you leave the connector's OAuth settings at their defaults. If you only use Claude, set the ChatGPT switch to `0`.
+- **Both:** keep the ChatGPT switch on and also set the Claude.ai switch.
+- **Claude.ai with your own client ID (alternative):** if you prefer to enter a client ID in Claude, add the predefined public client below to `ANGELOS_OAUTH_CLIENTS_JSON` instead, with this exact callback. Preserve all existing approved entries when editing the JSON array.
 - **Claude Code or Codex CLI:** also set `ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED=1` or `ANGELOS_OAUTH_CODEX_CIMD_ENABLED=1`. Each enables only that CLI's pinned metadata identity, which returns to a temporary listener on your computer. See [Connect Claude Code or Codex](/docs/claude-code-codex).
 
 ```json
@@ -351,10 +352,10 @@ The pinned identity is `https://chatgpt.com/oauth/client.json`, with callback `h
 ### Claude.ai example
 
 1. In Claude.ai, open **Customize → Connectors → + Add → Add custom connector**. Name it `Angelos` and enter **`https://my-angelos.vercel.app/mcp`**.
-2. Choose **Sign in now** for authentication and **Use your own OAuth client**. Enter `angelos-claude`, matching the predefined client configured in step 4. Leave the client secret blank.
+2. Select **Continue** and keep the default OAuth settings; leave the client ID and secret blank. Select **Connect**.
 3. Complete Angelos passkey sign-in and full-scope consent, then enable the connector in your conversation.
 
-Use the exact hosted callback `https://claude.ai/api/mcp/auth_callback`. Claude Code uses its own pinned identity instead; see [Connect Claude Code or Codex](/docs/claude-code-codex). Labels and workspace controls can change. See [Claude’s connection instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) and [OAuth requirements](https://claude.com/docs/connectors/building/authentication). Do not select automatic registration: Angelos does not expose that endpoint.
+With default settings, Claude identifies itself with its pinned metadata identity `https://claude.ai/oauth/mcp-oauth-client-metadata` and returns to the exact hosted callback `https://claude.ai/api/mcp/auth_callback`. This requires `ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED=1` from step 4; without it, Angelos answers `{"error":"invalid_client"}`. If you configured the predefined `angelos-claude` client instead, choose **Use your own OAuth client**, enter `angelos-claude`, and leave the client secret blank. Claude Code uses its own pinned identity instead; see [Connect Claude Code or Codex](/docs/claude-code-codex). Labels and workspace controls can change. See [Claude’s connection instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) and [OAuth requirements](https://claude.com/docs/connectors/building/authentication). Angelos does not expose dynamic client registration.
 
 ### Claude Code and Codex example
 
@@ -395,7 +396,7 @@ Once the first connection works, ask your agent to configure [Keep Angelos updat
 | Vercel page instead of JSON | Confirm the API project root is the repository root, the domain targets it, and production deployment protection permits OAuth discovery. |
 | Health says `configured: false`, or MCP returns 503 | Check production variables, exact matching URLs, full PEM, mailbox mode, Redis URL/token, and redeploy after edits. |
 | Health works, passkey enrollment fails | Use the configured production domain and fresh enrollment form; check Redis access and the SHA-256 hash of the exact raw token text. |
-| Assistant says unknown client or invalid redirect | Verify the selected client ID and exact callback against step 4; preserve other clients when updating the JSON array. For Claude Code or Codex, check its metadata switch. |
+| Assistant says unknown client or invalid redirect | Verify the selected client ID and exact callback against step 4; preserve other clients when updating the JSON array. For Claude.ai with default settings, Claude Code, or Codex, check its metadata switch. |
 | Sign-in works, mail fails | Check provider credentials, IMAP access, TLS hostnames, and Google/Microsoft grant or administrator restrictions. Health does not test these. |
 | Mail changes or preparation are denied | Check both scopes and server switches; refresh your assistant’s tool definitions after an upgrade. |
 | Access stops after working | Check Redis quotas/outages, provider grant expiry, and your connected OAuth grant. Reconnect when its lifetime ends. |

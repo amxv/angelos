@@ -13,6 +13,9 @@ An **Unreleased** entry describes work being prepared, not a published release. 
 ## 0.12.1 — Unreleased
 
 - Fixed MCP 2.0 requests that could wait for tool-list changes until the hosting provider timed out. Angelos has a fixed tool list and no longer advertises those notifications. Existing connections, [tools](/docs/tools), and OAuth permissions are unchanged.
+- Fixed Claude.ai custom connectors added with default OAuth settings. Claude on the web, Desktop, and mobile identifies itself with its own Client ID Metadata Document, `https://claude.ai/oauth/mcp-oauth-client-metadata`, whenever Angelos advertises metadata-document support, so the connection failed at `/oauth/authorize` with `invalid_client`. A new opt-in switch, `ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED`, enables only that pinned identity, fetched only from `claude.ai` and limited to the exact callback `https://claude.ai/api/mcp/auth_callback`. The predefined-client setup with a client ID entered in Claude still works. See the [Claude.ai example](/docs/quickstart#claudeai-example) and [client validation](/docs/oauth-reference#client-validation).
+
+**Upgrade notes:** No migration is required. The new switch defaults off, so existing deployments, grants, and connections behave as before. To connect Claude.ai with default settings, set `ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED=1` and redeploy Production.
 
 ## 0.12.0 — Released 2026-11-14
 

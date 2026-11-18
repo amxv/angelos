@@ -21,6 +21,10 @@ const (
 	// adds its local listener port, which loopback matching accepts.
 	ClaudeCodeClientID = "https://claude.ai/oauth/claude-code-client-metadata"
 	CodexClientID      = "https://chatgpt.com/oauth/codex/client.json"
+	// Claude on the web, Desktop, mobile, and Cowork share one hosted identity
+	// whose authorization response returns to Anthropic's fixed HTTPS callback.
+	ClaudeAIClientID    = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+	ClaudeAIRedirectURI = "https://claude.ai/api/mcp/auth_callback"
 )
 
 // metadataClient is one exact Client ID Metadata Document this server may
@@ -36,6 +40,7 @@ type metadataClient struct {
 var metadataClients = []metadataClient{
 	{ID: ChatGPTClientID, Name: "ChatGPT", Host: "chatgpt.com", Redirects: []string{ChatGPTRedirectURI}},
 	{ID: ClaudeCodeClientID, Name: "Claude Code", Host: "claude.ai", Redirects: []string{"http://localhost/callback", "http://127.0.0.1/callback"}},
+	{ID: ClaudeAIClientID, Name: "Claude", Host: "claude.ai", Redirects: []string{ClaudeAIRedirectURI}},
 	{ID: CodexClientID, Name: "Codex", Host: "chatgpt.com", Redirects: []string{"http://127.0.0.1/callback", "http://localhost/callback"}},
 }
 
@@ -47,7 +52,7 @@ type metadataCacheEntry struct {
 
 // metadataClient returns the pinned identity only when its operator switch is on.
 func (c Config) metadataClient(id string) (metadataClient, bool) {
-	enabled := map[string]bool{ChatGPTClientID: c.EnableChatGPTCIMD, ClaudeCodeClientID: c.EnableClaudeCodeCIMD, CodexClientID: c.EnableCodexCIMD}
+	enabled := map[string]bool{ChatGPTClientID: c.EnableChatGPTCIMD, ClaudeCodeClientID: c.EnableClaudeCodeCIMD, ClaudeAIClientID: c.EnableClaudeAICIMD, CodexClientID: c.EnableCodexCIMD}
 	for _, client := range metadataClients {
 		if client.ID == id && enabled[id] {
 			return client, true
@@ -57,7 +62,7 @@ func (c Config) metadataClient(id string) (metadataClient, bool) {
 }
 
 func (c Config) metadataClientsEnabled() bool {
-	return c.EnableChatGPTCIMD || c.EnableClaudeCodeCIMD || c.EnableCodexCIMD
+	return c.EnableChatGPTCIMD || c.EnableClaudeCodeCIMD || c.EnableClaudeAICIMD || c.EnableCodexCIMD
 }
 
 func reservedClientID(id string) bool {

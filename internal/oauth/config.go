@@ -53,7 +53,9 @@ type Config struct {
 	// Native CLI metadata identities use loopback callbacks on the owner's device.
 	EnableClaudeCodeCIMD bool
 	EnableCodexCIMD      bool
-	HTTPClient           *http.Client
+	// Claude.ai custom connectors (web, Desktop, mobile) use a hosted HTTPS callback.
+	EnableClaudeAICIMD bool
+	HTTPClient         *http.Client
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -73,6 +75,8 @@ func ConfigFromEnv() (Config, error) {
 		// Claude Code and Codex CLI sign-in through their pinned metadata documents.
 		EnableClaudeCodeCIMD: os.Getenv("ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED") == "1",
 		EnableCodexCIMD:      os.Getenv("ANGELOS_OAUTH_CODEX_CIMD_ENABLED") == "1",
+		// Claude.ai custom connectors sign in through Anthropic's hosted metadata document.
+		EnableClaudeAICIMD: os.Getenv("ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED") == "1",
 	}
 	if os.Getenv("MCP_OAUTH_JWKS_URL") != c.Issuer+JWKSPath {
 		return Config{}, errors.New("MCP_OAUTH_JWKS_URL must exactly equal MCP_OAUTH_ISSUER + /oauth/jwks.json")

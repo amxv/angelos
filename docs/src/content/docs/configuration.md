@@ -106,6 +106,7 @@ Leave `ANGELOS_OAUTH_ENABLED=0` or unset to keep external-issuer mode. When enab
 | `ANGELOS_OAUTH_CLIENTS_JSON` | Empty | Predefined public-client array with `client_id`, `client_name`, and exact HTTPS or port-free loopback `redirect_uris` |
 | `ANGELOS_OAUTH_CHATGPT_CIMD_ENABLED` | Disabled | `1` enables only the pinned ChatGPT metadata identity described in the runbook |
 | `ANGELOS_OAUTH_CLAUDE_CODE_CIMD_ENABLED` | Disabled | `1` enables only Claude Code's pinned metadata identity, with loopback callbacks; see [Connect Claude Code or Codex](/docs/claude-code-codex) |
+| `ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED` | Disabled | `1` enables only Claude.ai's pinned metadata identity, used by custom connectors with default OAuth settings, with its exact hosted callback |
 | `ANGELOS_OAUTH_CODEX_CIMD_ENABLED` | Disabled | `1` enables only the Codex CLI's pinned metadata identity, with loopback callbacks |
 | `ANGELOS_OAUTH_BOOTSTRAP_TOKEN_HASH` | Empty | Lowercase SHA-256 hex digest of the high-entropy one-time owner-enrollment token; remove after enrollment |
 
