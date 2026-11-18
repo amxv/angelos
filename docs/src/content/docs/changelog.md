@@ -10,6 +10,10 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
+## 0.12.1 — Unreleased
+
+- Fixed MCP 2.0 requests that could wait for tool-list changes until the hosting provider timed out. Angelos has a fixed tool list and no longer advertises those notifications. Existing connections, [tools](/docs/tools), and OAuth permissions are unchanged.
+
 ## 0.12.0 — Released 2026-11-14
 
 [Published release](https://github.com/amxv/angelos/releases/tag/v0.12.0) · [Source at v0.12.0](https://github.com/amxv/angelos/commit/8ec87beb15881f3f2afbe5c2476e768a79d1c6b5)

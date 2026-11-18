@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -57,6 +58,52 @@ func TestOAuthDiscoveryPreservesNewProtocolEnvelope(t *testing.T) {
 		if len(tool.SecuritySchemes) == 0 {
 			t.Fatal("new-protocol discovery omitted securitySchemes")
 		}
+	}
+}
+
+func TestMCP2ListenForStaticToolChangesCloses(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	body := `{"jsonrpc":"2.0","id":29,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"fixture","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}`
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/mcp", bytes.NewBufferString(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	r.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	r.Header.Set("Mcp-Method", "subscriptions/listen")
+	w := httptest.NewRecorder()
+	(&App{}).Handler().ServeHTTP(w, r)
+	if ctx.Err() != nil {
+		t.Fatal("listen did not return before the request deadline")
+	}
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("listen HTTP %d: %s", w.Code, w.Body.String())
+	}
+	var ack, terminal bool
+	for _, line := range bytes.Split(w.Body.Bytes(), []byte("\n")) {
+		data, ok := bytes.CutPrefix(line, []byte("data: "))
+		if !ok {
+			continue
+		}
+		var msg struct {
+			Method string `json:"method"`
+			Params struct {
+				Notifications map[string]any `json:"notifications"`
+			} `json:"params"`
+			ID     int             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("invalid listen event: %v", err)
+		}
+		if msg.Method == "notifications/subscriptions/acknowledged" {
+			ack = msg.Params.Notifications != nil && len(msg.Params.Notifications) == 0
+		}
+		if msg.ID == 29 && msg.Result != nil {
+			terminal = true
+		}
+	}
+	if !ack || !terminal {
+		t.Fatalf("expected empty acknowledgement and terminal result: %s", w.Body.String())
 	}
 }
 
