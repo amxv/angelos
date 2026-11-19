@@ -10,7 +10,9 @@ The release history for Angelos. For instructions that apply across versions, us
 
 An **Unreleased** entry describes work being prepared, not a published release. Check [GitHub Releases](https://github.com/amxv/angelos/releases) for publication status. Earlier version entries are reconstructed from the versioned implementation and documentation linked below; release dates are omitted where publication dates have not been verified.
 
-## 0.12.1 — Unreleased
+## 0.12.1 — Released 2026-11-19
+
+[Published release](https://github.com/amxv/angelos/releases/tag/v0.12.1) · [Source at v0.12.1](https://github.com/amxv/angelos/commit/54154f0a06200b0794ed2b30dc25f1530c41257d)
 
 - Fixed MCP 2.0 requests that could wait for tool-list changes until the hosting provider timed out. Angelos has a fixed tool list and no longer advertises those notifications. Existing connections, [tools](/docs/tools), and OAuth permissions are unchanged.
 - Fixed Claude.ai custom connectors added with default OAuth settings. Claude on the web, Desktop, and mobile identifies itself with its own Client ID Metadata Document, `https://claude.ai/oauth/mcp-oauth-client-metadata`, whenever Angelos advertises metadata-document support, so the connection failed at `/oauth/authorize` with `invalid_client`. A new opt-in switch, `ANGELOS_OAUTH_CLAUDE_AI_CIMD_ENABLED`, enables only that pinned identity, fetched only from `claude.ai` and limited to the exact callback `https://claude.ai/api/mcp/auth_callback`. The predefined-client setup with a client ID entered in Claude still works. See the [Claude.ai example](/docs/quickstart#claudeai-example) and [client validation](/docs/oauth-reference#client-validation).
