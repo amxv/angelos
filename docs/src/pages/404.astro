@@ -1,0 +1,19 @@
+---
+// Angelos uses its own SiteLayout, so it keeps its own 404 page instead of the
+// generic one ZueDocs injects. ZueDocs skips its page when this file exists.
+import Arrow from "../components/Arrow.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+<SiteLayout title="Page not found — Angelos" description="This page moved or never existed.">
+  <section class="shell not-found-page">
+    <p class="eyebrow">404 · Return to sender</p>
+    <h1>This page <em>never arrived.</em></h1>
+    <p>The address may have changed, or the link was mistyped. The docs index is a good place to start again.</p>
+    <div class="hero-links"><a class="action-link" href="/docs">Open the docs <span aria-hidden="true"><Arrow /></span></a><a class="quiet-link" href="/">Back home</a></div>
+  </section>
+</SiteLayout>
+
+<style>
+  .not-found-page { padding-top: 96px; padding-bottom: 120px; min-height: 52vh; }
+  .not-found-page p:not(.eyebrow) { max-width: 34rem; margin-top: 18px; color: var(--muted); line-height: 1.6; }
+</style>
